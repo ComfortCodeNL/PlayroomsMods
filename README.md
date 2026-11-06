@@ -1,3 +1,6 @@
+<!-- Search Optimization Keywords: Playrooms multiplayer mod, Playrooms coop mod, how to play Playrooms with friends, Playrooms PC game modding, BepInEx 6 Playrooms guide -->
+
+
 # Playrooms Co-op
 
 Two-player online co-op for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
