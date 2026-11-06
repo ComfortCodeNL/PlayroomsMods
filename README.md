@@ -29,10 +29,25 @@ One player hosts and the other joins through an in-game menu (F8). You both play
 ## Installation
 
 1. Make sure Playrooms is closed before continuing!
-2. Download artifact **#791** of [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be) (the Unity IL2CPP win x64 build).
-3. Extract it into the Playrooms game folder. In Steam, right-click Playrooms > Manage > Browse local files to find it. It should be in the same location as the `.exe` file.
-4. Launch the game. It should fail with an error, but it will build the correct file structure in the game folder.
-5. Extract this mod's zip and drag the `BepInEx` folder from the zip into the same game folder as step 3. If you have the files set up correctly, it should look like this:
+2. Download artifact **#791** of [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be). The page lists many files, so make sure you get this exact one:
+
+   `BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.791+b782da4.zip`
+
+   (Not Unity.Mono, and not x86.)
+3. Extract it into the Playrooms game folder. In Steam, right-click Playrooms > Manage > Browse local files to find it. Use the full game's folder, not `Playrooms Demo`.
+
+   Windows "Extract All" adds a folder named after the zip to the path. Remove that part so the path ends in `\Playrooms`. When it's right, these sit next to `Playrooms.exe`:
+
+   ```
+   Playrooms
+   ├── BepInEx
+   ├── dotnet
+   ├── doorstop_config.ini
+   ├── winhttp.dll
+   └── Playrooms.exe
+   ```
+
+4. Download this mod's zip from [Releases](../../releases), open it, and drag the `BepInEx` folder from the zip into the same game folder. Let it merge with the existing `BepInEx` folder. If you have the files set up correctly, it should look like this:
 
    ```
    Playrooms
@@ -46,8 +61,16 @@ One player hosts and the other joins through an in-game menu (F8). You both play
                └── README.txt
    ```
 
-6. Launch the game again. This time a patch will be applied to allow BepInEx to read the game. It will take some time, and when it is finished you will be at the main menu.
-7. Close and reopen the game one more time.
+5. Launch the game. The first launch applies a patch that lets BepInEx read the game. It takes a little longer, and when it is finished you will be at the main menu.
+6. Close and reopen the game one more time.
+
+### Steam Deck and Linux
+
+BepInEx needs one extra setting under Proton. In Steam, right-click Playrooms > Properties > General, and put this in **Launch Options**:
+
+```
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+```
 
 ## How to play
 
@@ -62,6 +85,19 @@ Delete these two folders:
 
 - `BepInEx\plugins\PlayroomsCoop`
 - `BepInEx\patchers\PlayroomsPatcher`
+
+## Troubleshooting
+
+The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.0.0 loaded`, the mod is running.
+
+- **No log file, or the game starts like normal with no BepInEx:** BepInEx isn't loading. Check that `winhttp.dll` is right next to `Playrooms.exe` and not in a subfolder (see step 3). Some antivirus programs quarantine `winhttp.dll` because it loads mods. If yours did, restore it and add an exception. On Steam Deck or Linux, check the launch option above.
+- **Log exists but has no "Playrooms Co-op" line:** check that the mod files are in the places shown in step 4, not in an extra folder such as `PlayroomsCoop_1.0.0\BepInEx`.
+- **Nothing happens when pressing F8:** click into the game window first, and check the log for the "loaded" line.
+- **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same version of the mod.
+- **The first launch after a Playrooms update is slow:** this is normal. The patcher rebuilds its files whenever the game updates.
+- **To force the patcher to rebuild:** open `BepInEx\config\com.playroomscoop.patcher.cfg`, set `ForceRegenerate = true`, and start the game.
+
+**Reporting a bug:** open an issue on this page and attach `BepInEx\LogOutput.log` from the session where it happened. Say whether you were the host or the joining player, and what you were doing when it went wrong.
 
 ## Disclaimer
 
