@@ -107,6 +107,7 @@ The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playro
 
 This mod is not endorsed by Two Pixels UG, the developers of Playrooms. They will not assist you in troubleshooting this mod, and it has no connection to the dev team. Please bring any issues up here so that I can fix them.
 
-## Shout outs
+## Want to buy me a coffee?
+<a href="https://www.buymeacoffee.com/lyrawolf" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 Thanks to my wife, who loves these cozy clean-em-ups.
