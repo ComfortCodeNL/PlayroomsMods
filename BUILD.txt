@@ -1,0 +1,9 @@
+Playrooms Co-op 1.0.0 source.
+
+Mod (PlayroomsCoop.csproj)
+  Put the BepInEx core and interop assemblies for Playrooms in a "refs" folder next to the project
+  (from <game>\BepInEx\core and <game>\BepInEx\interop), then: dotnet build -c Release
+
+Patcher (patcher\PlayroomsPatcher.csproj)
+  Builds against a Playrooms install with BepInEx. Default path is the Steam Playrooms folder; change it with:
+  dotnet build -c Release -p:GameDir="D:\SteamLibrary\steamapps\common\Playrooms"
