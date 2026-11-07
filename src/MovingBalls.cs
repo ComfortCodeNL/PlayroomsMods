@@ -22,21 +22,26 @@ namespace PlayroomsCoop
                     var tracked = new HashSet<IntPtr>();
                     foreach (var mv in _moving.Values) tracked.Add(R.Ptr(mv.Ball));
                     foreach (var pp0 in _puppets.Values) tracked.Add(R.Ptr(pp0.Ball));
-                    foreach (var ball in R.Items(active))
+                    // big piles wake hundreds of balls: read a slice per scan, cheapest checks first
+                    var all = R.Items(active, _scanCursor, ScanBudget, out int n);
+                    if (n < 0) n = all.Count;
+                    int budget = all.Count;
+                    for (int bi = 0; bi < budget; bi++)
                     {
+                        var ball = all[bi];
                         if (ball == null || tracked.Contains(R.Ptr(ball))) continue;
-                        var spot = R.Get(ball, "Owner");
-                        if (spot == null) continue;
-                        IntPtr p = R.Ptr(spot);
-                        if (_moving.ContainsKey(p) || _puppets.ContainsKey(p)) continue;
-                        if (_recentPuppet.TryGetValue(p, out float pt) && now - pt < 3f) continue;
-                        if (_settleCool.TryGetValue(p, out float sc) && now - sc < 1.5f && Speed2(ball) < 0.01f) continue;
                         var bpos = ((Component)ball).transform.position;
                         if (RemoteSweepNear(bpos, now)) continue;
                         bool quiet = LocalSweepNear(bpos, now);
                         float dMe = HDist(bpos, me.Value);
                         if (!quiet && dMe > 6f) continue;
                         if (!quiet && them != null && HDist(bpos, them.Value) < dMe) continue;
+                        var spot = R.Get(ball, "Owner");
+                        if (spot == null) continue;
+                        IntPtr p = R.Ptr(spot);
+                        if (_moving.ContainsKey(p) || _puppets.ContainsKey(p)) continue;
+                        if (_recentPuppet.TryGetValue(p, out float pt) && now - pt < 3f) continue;
+                        if (_settleCool.TryGetValue(p, out float sc) && now - sc < 1.5f && Speed2(ball) < 0.01f) continue;
                         if (quiet ? _quietCount >= MaxQuiet : _moving.Count - _quietCount >= MaxMoving) { CapHit(now); continue; }
                         var room = R.Get(spot, "_room");
                         if (room == null) continue;
@@ -46,6 +51,7 @@ namespace PlayroomsCoop
                         _moving[p] = new Mover { Spot = spot, Ball = ball, Room = R.Get<string>(room, "RoomId"), Idx = idx, Start = pos, LastSent = pos, Since = now, Anchor = pos, AnchorAt = now, Quiet = quiet };
                         if (quiet) _quietCount++;
                     }
+                    _scanCursor = n == 0 ? 0 : (_scanCursor + budget) % n;
                 }
             }
 
@@ -114,6 +120,8 @@ namespace PlayroomsCoop
             }
         }
 
+        private const int ScanBudget = 400;
+        private static int _scanCursor;
         private const int MaxMoving = 200, MaxQuiet = 5000, MaxGlides = 150;
         private const float GlideTime = 0.4f;
 
@@ -234,11 +242,16 @@ namespace PlayroomsCoop
             }
         }
 
+        private static readonly List<IntPtr> _puppetKeys = new List<IntPtr>();
+        private static System.Reflection.MethodInfo _invalidateDraw;
+
         private static void TickPuppets(float now, float dt)
         {
             if (_puppets.Count == 0) return;
             float renderT = now - _clockOffset - InterpDelay;
-            foreach (var p in new List<IntPtr>(_puppets.Keys))
+            _puppetKeys.Clear();
+            _puppetKeys.AddRange(_puppets.Keys);
+            foreach (var p in _puppetKeys)
             {
                 var pp = _puppets[p];
                 if (!Alive(pp.Ball)) { _puppets.Remove(p); continue; }
@@ -250,16 +263,20 @@ namespace PlayroomsCoop
                     continue;
                 }
                 var pos = Sample(pp.Samples, renderT);
-                t.position = pos;
                 Vector3 d = pos - pp.LastShown;
-                float dist = Mathf.Sqrt(d.x * d.x + d.z * d.z);
-                if (dist > 0.0005f)
+                // a ball that has stopped needs no transform write or redraw
+                if (d.sqrMagnitude > 0.0000001f || !pp.Shown)
                 {
-                    var axis = new Vector3(d.z / dist, 0f, -d.x / dist);
-                    t.rotation = Quaternion.AngleAxis(dist / pp.Radius * Mathf.Rad2Deg, axis) * t.rotation;
+                    t.position = pos;
+                    float dist = Mathf.Sqrt(d.x * d.x + d.z * d.z);
+                    if (dist > 0.0005f)
+                    {
+                        var axis = new Vector3(d.z / dist, 0f, -d.x / dist);
+                        t.rotation = Quaternion.AngleAxis(dist / pp.Radius * Mathf.Rad2Deg, axis) * t.rotation;
+                    }
+                    pp.LastShown = pos; pp.Shown = true;
+                    InvalidateDraw(pp.Ball);
                 }
-                pp.LastShown = pos;
-                try { R.Call(pp.Ball, "InvalidateDrawMatrix"); } catch { }
                 bool pastEnd = pp.Samples.Count == 0 || renderT > pp.Samples[pp.Samples.Count - 1].t + 0.15f;
                 if (now - pp.LastUpdate > 0.6f && pastEnd)
                 {
@@ -269,6 +286,17 @@ namespace PlayroomsCoop
                     _puppets.Remove(p);
                 }
             }
+        }
+
+        private static void InvalidateDraw(object ball)
+        {
+            try
+            {
+                if (_invalidateDraw == null || _invalidateDraw.DeclaringType == null || !_invalidateDraw.DeclaringType.IsInstanceOfType(ball))
+                    _invalidateDraw = ball.GetType().GetMethod("InvalidateDrawMatrix", Type.EmptyTypes);
+                _invalidateDraw?.Invoke(ball, null);
+            }
+            catch { }
         }
 
         private static Vector3 Sample(List<(float t, Vector3 p)> s, float t)

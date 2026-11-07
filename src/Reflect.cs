@@ -174,11 +174,41 @@ namespace PlayroomsCoop
             return list;
         }
 
-        public static List<object> Items(object coll)
+        private static readonly Dictionary<Type, (MethodInfo count, MethodInfo item)> _indexers = new Dictionary<Type, (MethodInfo, MethodInfo)>();
+
+        public static List<object> Items(object coll) => Items(coll, 0, -1, out _);
+
+        // sliceLen >= 0: only that many items, wrapping from sliceStart; total gets the full count
+        public static List<object> Items(object coll, int sliceStart, int sliceLen, out int total)
         {
+            total = -1;
             var list = new List<object>();
             if (coll == null) return list;
             if (coll is IEnumerable e) { foreach (var x in e) list.Add(x); return list; }
+            // il2cpp lists: Count + indexer is one call per item instead of MoveNext + Current
+            var t = coll.GetType();
+            if (!_indexers.TryGetValue(t, out var ix))
+            {
+                var cnt = t.GetProperty("Count", Inst)?.GetGetMethod();
+                var item = t.GetMethod("get_Item", Inst, null, new[] { typeof(int) }, null);
+                ix = cnt != null && item != null ? (cnt, item) : (null, null);
+                _indexers[t] = ix;
+            }
+            if (ix.count != null)
+            {
+                int n = Convert.ToInt32(ix.count.Invoke(coll, null));
+                if (sliceLen >= 0)
+                {
+                    total = n;
+                    if (n == 0) return list;
+                    var a1 = new object[1];
+                    for (int i = 0; i < Math.Min(sliceLen, n); i++) { a1[0] = (sliceStart + i) % n; list.Add(ix.item.Invoke(coll, a1)); }
+                    return list;
+                }
+                var arg = new object[1];
+                for (int i = 0; i < n; i++) { arg[0] = i; list.Add(ix.item.Invoke(coll, arg)); }
+                return list;
+            }
             var en = Call(coll, "GetEnumerator");
             while (Convert.ToBoolean(Call(en, "MoveNext"))) list.Add(Get(en, "Current"));
             return list;
@@ -267,6 +297,9 @@ namespace PlayroomsCoop
         private int _errors;
 
         public Feature(string name, bool enabled) { Name = name; Enabled = enabled; }
+
+        // a new world gets a fresh start; errors while the old one was unloading shouldn't carry over
+        public void Rearm(bool enabled) { Enabled = enabled; _errors = 0; }
 
         public bool Try(Action a, string what)
         {

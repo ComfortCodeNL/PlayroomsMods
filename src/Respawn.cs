@@ -8,7 +8,8 @@ namespace PlayroomsCoop
         public static Feature Respawn;
 
         private static bool _partnerDead, _partnerSafe, _localSafe, _sentSafe;
-        private static float _respawnAt = -1f, _respawnCooldownUntil, _nextSafeCheck;
+        private static float _respawnAt = -1f, _respawnCooldownUntil, _nextSafeCheck, _followDeathAt = -1f;
+        private static bool _localDead;
         private static object _lockdown;
         private const float JumpscareTime = 2.5f;
 
@@ -17,7 +18,7 @@ namespace PlayroomsCoop
         private static void RespawnReset()
         {
             _partnerDead = false; _partnerSafe = false; _localSafe = false; _sentSafe = false;
-            _respawnAt = -1f;
+            _respawnAt = -1f; _followDeathAt = -1f; _localDead = false;
         }
 
         private static object Lockdown()
@@ -57,12 +58,14 @@ namespace PlayroomsCoop
         internal static void OnDeathFlowDone(bool started)
         {
             if (!started || !_connected) return;
+            _localDead = true; _followDeathAt = -1f;
             Protocol.SendSimple(_peer, Msg.PlayerDied, SteamNet.SendReliable);
             Plugin.Log.LogInfo("[Respawn] you died");
         }
 
         private static void RespawnTick(float now)
         {
+            if (_followDeathAt >= 0f && now >= _followDeathAt) FollowPartnerDeath();
             if (_respawnAt >= 0f && now >= _respawnAt)
             {
                 _respawnAt = -1f;
@@ -108,6 +111,8 @@ namespace PlayroomsCoop
                 case Msg.PlayerDied:
                     _partnerDead = true;
                     Plugin.Log.LogInfo("[Respawn] partner died");
+                    // nobody was safe, so the run is over for both of us; without this the client is left in a dead world
+                    if (!_localDead && _respawnAt < 0f) _followDeathAt = Time.realtimeSinceStartup + 1.5f;
                     break;
                 case Msg.PlayerRespawned:
                     CoopBehaviour.Notify("Your partner was caught and is back in the clean room");
@@ -119,5 +124,20 @@ namespace PlayroomsCoop
         }
 
         private static void RespawnNewDay() => _partnerDead = false;
+
+        private static void FollowPartnerDeath()
+        {
+            _followDeathAt = -1f;
+            if (_localDead) return;
+            var es = EnemyService();
+            if (es == null) return;
+            try { if (Convert.ToBoolean(R.Get(es, "_deathFlowActive"))) return; } catch { }
+            _localDead = true;
+            Plugin.Log.LogInfo("[Respawn] partner was caught with nobody safe: ending the run here too");
+            CoopBehaviour.Notify("Your partner was caught and nobody was safe. The run is over");
+            try { R.Set(es, "_deathFlowActive", true); } catch { }
+            try { R.Call(es, "ShowGameOver"); }
+            catch (Exception e) { Plugin.Log.LogWarning("[Respawn] game over: " + e.Message); }
+        }
     }
 }

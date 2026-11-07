@@ -44,7 +44,7 @@ namespace PlayroomsCoop
         private static readonly Dictionary<IntPtr, Mover> _moving = new Dictionary<IntPtr, Mover>();
         private sealed class Puppet
         {
-            public object Spot, Ball, Body; public bool OrigKinematic; public float LastUpdate, Radius = 0.1f;
+            public object Spot, Ball, Body; public bool OrigKinematic, Shown; public float LastUpdate, Radius = 0.1f;
             public Vector3 Target, LastShown;
             public readonly List<(float t, Vector3 p)> Samples = new List<(float, Vector3)>();
         }
@@ -100,6 +100,7 @@ namespace PlayroomsCoop
 
         public static void OnConnected(ulong peer, bool isHost)
         {
+            Shared.NewWorld();
             _connected = true; _peer = peer; _isHost = isHost;
             _snapshotSentFor = IntPtr.Zero;
             _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear(); _warnedRooms.Clear();
@@ -121,7 +122,7 @@ namespace PlayroomsCoop
 
         public static void OnDisconnected()
         {
-            _connected = false; _peer = 0; _pendDay = -1; _bedCheckAt = -1f;
+            _connected = false; _peer = 0; _pendDay = -1; _bedCheckAt = -1f; _keptPairs.Clear();
             RemoteHead = null;
             Entity.Try(RestoreEnemy, "restore entity");
             if (_proxy != null) { UnityEngine.Object.Destroy(_proxy); _proxy = null; }
@@ -202,6 +203,7 @@ namespace PlayroomsCoop
             R.Patch(R.T("TwoPixels.Interactables.PurchaseInteractable"), "EquipPurchasedTool", 0, typeof(Hooks), nameof(Hooks.EquipToolPrefix), null);
             R.Patch(R.T("TwoPixels.Room.RoomService"), "OnHubDoorStateChanged", 1, typeof(Hooks), nameof(Hooks.HubDoorPrefix), nameof(Hooks.HubDoorPostfix));
             R.Patch(R.T(DoorT), "RequestClose", 0, typeof(Hooks), nameof(Hooks.DoorClosePrefix), null);
+            PortalHooks();
         }
 
         internal static void OnLocalSpotCollected(object spot)
@@ -522,6 +524,7 @@ namespace PlayroomsCoop
         public static void HubDoorPrefix() => World.OnHubDoorChange(true);
         public static void HubDoorPostfix() => World.OnHubDoorChange(false);
         public static bool DoorClosePrefix() => World.OnDoorRequestClose();
+        public static void ClaimOpenPairPrefix(object __instance) => World.OnClaimOpenPair(__instance);
         public static bool EquipToolPrefix() => Upgrades.OnEquipPurchasedTool();
         public static bool RobotSayPrefix(object __instance, ref bool __result) => Shared.OnSayPrefix(__instance, ref __result);
         public static void RobotSayPostfix(object __instance, object clip, bool interrupt, bool __result) => Shared.OnSaid(__instance, clip, interrupt, __result);

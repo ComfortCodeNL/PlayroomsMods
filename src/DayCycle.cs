@@ -86,12 +86,18 @@ namespace PlayroomsCoop
             _lastDoorScan = now;
             _doors.Clear();
             foreach (var d in R.FindAll(R.T(DoorT))) _doors[DoorKey(d)] = d;
+            ScanPortals();
+            ScanLockers();
+            ScanHotel();
         }
 
         private static void PollDoors(float now)
         {
             if (now - _lastDoorScan > 5f) ScanDoors(now);
             DoorWaitTick(now);
+            KeptPairsTick();
+            PollLockers(now);
+            PollHotel(now);
             foreach (var kv in _doors)
             {
                 if (!Alive(kv.Value)) continue;
@@ -108,6 +114,8 @@ namespace PlayroomsCoop
         private static void ApplyDoor(string key, bool open)
         {
             float now = Time.realtimeSinceStartup;
+            if (key.StartsWith(LockerPrefix, StringComparison.Ordinal)) { ApplyLocker(key, open, now); return; }
+            if (key.StartsWith(HotelPrefix, StringComparison.Ordinal)) { ApplyHotel(key, open, now); return; }
             if (!_doors.TryGetValue(key, out var door) || !Alive(door))
             {
                 ScanDoors(now);
@@ -118,6 +126,7 @@ namespace PlayroomsCoop
             if (cur == open) return;
             if (!open && PlayerInDoorway(door)) { _doorCloseWait[key] = now; return; }
             _doorIgnoreUntil[key] = now + 1.5f;
+            if (_coupledDoor.TryGetValue(key, out var coupled)) _doorIgnoreUntil[coupled] = now + 1.5f;
             if (open) R.Call(door, "OpenForNavigation");
             else R.Call(door, "RequestClose");
         }

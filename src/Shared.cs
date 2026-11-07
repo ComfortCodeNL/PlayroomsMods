@@ -40,6 +40,7 @@ namespace PlayroomsCoop
         private const float Delay = 0.1f;
 
         public static void Init() => Feature = new Feature("Robots/Vacuums", Plugin.SyncObjects.Value);
+        public static void NewWorld() => Feature.Rearm(Plugin.SyncObjects.Value);
 
         public static void OnConnected(ulong peer, bool isHost)
         {
@@ -99,7 +100,13 @@ namespace PlayroomsCoop
 
         private static object Body(Obj o)
         {
-            try { return R.Get(o.Ref, o.Kind == Kind.Robot ? "body" : o.Kind == Kind.Vacuum ? "deviceRigidbody" : "stationBody"); } catch { return null; }
+            if (!World.Alive(o.Ref)) return null;
+            try
+            {
+                var rb = R.Get(o.Ref, o.Kind == Kind.Robot ? "body" : o.Kind == Kind.Vacuum ? "deviceRigidbody" : "stationBody");
+                return World.Alive(rb) ? rb : null;
+            }
+            catch { return null; }
         }
 
         private static object Col(Obj o)
@@ -331,7 +338,7 @@ namespace PlayroomsCoop
             if (!Feature.Enabled) return;
             var r = new Reader(buf, len, Protocol.HeaderSize);
             var key = ((Kind)r.U8(), r.I32());
-            if (!_objs.TryGetValue(key, out var o))
+            if (!_objs.TryGetValue(key, out var o) || !World.Alive(o.Ref))
             {
                 Scan(Time.realtimeSinceStartup);
                 if (!_objs.TryGetValue(key, out o))
