@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework><AssemblyName>PlayroomsNewGamePlus</AssemblyName><RootNamespace>PlayroomsNewGamePlus</RootNamespace>
+    <LangVersion>latest</LangVersion><Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems><DebugType>none</DebugType><Deterministic>true</Deterministic>
+    <Version>1.2.2</Version>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="src/*.cs" /></ItemGroup>
+  <ItemGroup>
+    <Reference Include="../refs/*.dll" Private="false" />
+  </ItemGroup>
+</Project>

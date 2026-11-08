@@ -1,12 +1,27 @@
-# Playrooms Co-op
+# Playrooms Co-op + New Game+
 
-Online co-op for up to 4 players in [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
+Two mods for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/), hosted together for now:
 
-## Main features
+- **Playrooms Co-op 1.1.0**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
+- **Playrooms New Game+ 1.2.2**: replay the game after the end credits with a head start, in Simple, SpeedRun or Balance Patch mode, plus Spooky, Tokens and a Starter kit.
+
+Each mod works on its own, and they work together: New Game+ runs can be played in co-op. Grab the bundle to get both, or just the one you want.
+
+## Downloads
+
+On the [Releases](../../releases) page, each release has three zips:
+
+| Zip | Contains |
+|---|---|
+| `PlayroomsCoopNGPlus_Bundle_...zip` | Both mods |
+| `PlayroomsCoop_1.1.0.zip` | Co-op only |
+| `PlayroomsNewGamePlus_1.2.2.zip` | New Game+ only |
+
+All three install the same way and include the same patcher, so mixing them is fine.
+
+## Co-op: main features
 
 One player hosts and up to three friends join through an in-game menu (F8). Everyone plays in the host's Playroom at the same time, and each joining player's own save is set aside and put back untouched afterwards.
-
-### Shared between players
 
 - Every player appears as a colored avatar with a name tag. Pick your color in the lobby
 - Ball pickups, ball pits and vents are shared between players
@@ -23,12 +38,33 @@ One player hosts and up to three friends join through an in-game menu (F8). Ever
 - Robots are run by whichever player is nearest, which spreads the work between computers
 - More players, more daytime scares: each extra player makes them more frequent, with shorter gaps (Normal and Hardcore; Cozy is unchanged)
 
+## New Game+: main features
+
+New Game+ unlocks once you've seen the end credits. Start it from the box next to the end screen, or from **New Game+ available** in the main menu, which lists every finished save. The new run goes into the next empty slot, and the finished save is never touched.
+
+- **NG+ Simple**: a fresh world with the shop and every upgrade open from day 1
+- **NG+ SpeedRun**: every upgrade level and tool you owned comes along
+- **NG+ Balance Patch**: like Simple, with the hand vacuum retuned
+- **Spooky**: twice the daytime scares, with shorter gaps
+- **Tokens**: one free purchase per NG+ cycle (NG+4 = 4 tokens)
+- **Starter kit**: charging station, robot vacuum, ball vacuum, hand vacuum, flashlight, radar and broom on day 1
+- Collectables and Lexi the cat come along, terminal programs are there from day 1, and finishing a run unlocks the next one (NG+2, NG+3, ...)
+
+The full guide is in `BepInEx\plugins\PlayroomsNewGamePlus\README.txt` after installing.
+
+### New Game+ in co-op
+
+- The host starts New Game+ and everyone else is brought into the new world like any co-op game
+- Mode, options, SpeedRun items, the starter kit, collectables and open upgrades are shared
+- Tokens are one shared pool, counted by the host, so two players can't spend the same last token
+- Spooky stacks with Co-op's extra daytime scares for bigger groups
+- Every player needs both mods installed
+
 ## Requirements
 
 - [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) (full game, Steam)
 - [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be), Unity IL2CPP x64 build
-- Every player needs this mod installed, at the same version
-- You can only join or invite Steam friends who are playing Playrooms
+- For co-op: every player needs the same mod versions, and you can only join or invite Steam friends who are playing Playrooms
 
 ## Installation
 
@@ -51,7 +87,7 @@ One player hosts and up to three friends join through an in-game menu (F8). Ever
    └── Playrooms.exe
    ```
 
-4. Download this mod's zip from [Releases](../../releases), open it, and drag the `BepInEx` folder from the zip into the same game folder. Let it merge with the existing `BepInEx` folder. If you have the files set up correctly, it should look like this:
+4. Download a mod zip from [Releases](../../releases), open it, and drag the `BepInEx` folder from the zip into the same game folder. Let it merge with the existing `BepInEx` folder. With the bundle, it should look like this:
 
    ```
    Playrooms
@@ -60,10 +96,15 @@ One player hosts and up to three friends join through an in-game menu (F8). Ever
        │   └── PlayroomsPatcher
        │       └── PlayroomsPatcher.dll
        └── plugins
-           └── PlayroomsCoop
-               ├── PlayroomsCoop.dll
+           ├── PlayroomsCoop
+           │   ├── PlayroomsCoop.dll
+           │   └── README.txt
+           └── PlayroomsNewGamePlus
+               ├── PlayroomsNewGamePlus.dll
                └── README.txt
    ```
+
+   With only one mod, only that mod's folder is under `plugins`.
 
 5. Launch the game. The first launch applies a patch that lets BepInEx read the game. It takes a little longer, and when it is finished you will be at the main menu.
 6. Close and reopen the game one more time.
@@ -76,7 +117,7 @@ BepInEx needs one extra setting under Proton. In Steam, right-click Playrooms > 
 WINEDLLOVERRIDES="winhttp=n,b" %command%
 ```
 
-## How to play
+## How to play co-op
 
 1. In game, press **F8** to open the co-op menu.
 2. You will see friends who are online in Playrooms, as long as they also have the mod and followed these same instructions.
@@ -85,27 +126,38 @@ WINEDLLOVERRIDES="winhttp=n,b" %command%
 
 ## Uninstalling
 
-Delete these two folders:
+Delete the folder of each mod you want to remove:
 
 - `BepInEx\plugins\PlayroomsCoop`
-- `BepInEx\patchers\PlayroomsPatcher`
+- `BepInEx\plugins\PlayroomsNewGamePlus`
+
+Once neither mod is left, also delete `BepInEx\patchers\PlayroomsPatcher`. Your saves are never deleted.
 
 ## Troubleshooting
 
-The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.0 loaded`, the mod is running.
+The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.0 loaded` or `Playrooms New Game Plus 1.2.2 loaded`, that mod is running.
 
 - **No log file, or the game starts like normal with no BepInEx:** BepInEx isn't loading. Check that `winhttp.dll` is right next to `Playrooms.exe` and not in a subfolder (see step 3). Some antivirus programs quarantine `winhttp.dll` because it loads mods. If yours did, restore it and add an exception. On Steam Deck or Linux, check the launch option above.
-- **Log exists but has no "Playrooms Co-op" line:** check that the mod files are in the places shown in step 4, not in an extra folder such as `PlayroomsCoop_1.1.0\BepInEx`.
+- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 4, not in an extra folder such as `PlayroomsCoop_1.1.0\BepInEx`.
 - **Nothing happens when pressing F8:** click into the game window first, and check the log for the "loaded" line.
-- **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same version of the mod.
+- **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same mod versions.
+- **No New Game+ in the menu:** only saves that reached the end credits count.
 - **The first launch after a Playrooms update is slow:** this is normal. The patcher rebuilds its files whenever the game updates.
 - **To force the patcher to rebuild:** open `BepInEx\config\com.playroomscoop.patcher.cfg`, set `ForceRegenerate = true`, and start the game.
 
-**Reporting a bug:** open an issue on this page and attach `BepInEx\LogOutput.log` from the session where it happened. Say whether you were the host or the joining player, and what you were doing when it went wrong.
+**Reporting a bug:** open an issue on this page and attach `BepInEx\LogOutput.log` from the session where it happened. Say which mod, whether you were the host or a joining player, and what you were doing when it went wrong.
+
+## Source
+
+- `PlayroomsCoop/`: Co-op source
+- `PlayroomsNewGamePlus/`: New Game+ source
+- `patcher/`: the shared patcher that lets BepInEx run on the game's Unity version
+
+Build steps are in `BUILD.txt`.
 
 ## Disclaimer
 
-This mod is not endorsed by Two Pixels UG, the developers of Playrooms. They will not assist you in troubleshooting this mod, and it has no connection to the dev team. Please bring any issues up here so that I can fix them.
+These mods are not endorsed by Two Pixels UG, the developers of Playrooms. They will not assist you in troubleshooting these mods, and they have no connection to the dev team. Please bring any issues up here so that I can fix them.
 
 ## Shout outs
 
