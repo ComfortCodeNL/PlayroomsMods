@@ -9,16 +9,15 @@ Each mod works on its own, and they work together: New Game+ runs can be played 
 
 ## Downloads
 
-On the [Releases](../../releases) page, each release has these zips. The `_WithBepInEx` ones include BepInEx, so there's nothing else to download:
+On the [Releases](../../releases) page, each release has these zips. Each one includes BepInEx, so there's nothing else to download:
 
 | Zip | Contains |
 |---|---|
 | `PlayroomsCoopNGPlus_Bundle_..._WithBepInEx.zip` | Both mods + BepInEx (recommended) |
 | `PlayroomsCoop_1.1.0_WithBepInEx.zip` | Co-op + BepInEx |
 | `PlayroomsNewGamePlus_1.2.2_WithBepInEx.zip` | New Game+ + BepInEx |
-| The same three without `_WithBepInEx` | Just the mods, for anyone who already has BepInEx 6 installed |
 
-All of them include the same patcher, so mixing them is fine.
+All of them include the same BepInEx and patcher, so installing more than one is fine.
 
 ## Co-op: main features
 
@@ -70,7 +69,7 @@ The full guide is in `BepInEx\plugins\PlayroomsNewGamePlus\README.txt` after ins
 
 1. Make sure Playrooms is closed before continuing!
 2. Find the game folder: in Steam, right-click Playrooms > Manage > Browse local files. It's the folder with `Playrooms.exe`. Use the full game's folder, not `Playrooms Demo`.
-3. Download a `_WithBepInEx` zip from [Releases](../../releases) and unzip it into that folder. Windows "Extract All" adds a folder named after the zip to the path: remove that part so the path ends in `\Playrooms`. When it's right, the game folder looks like this (with the bundle):
+3. Download a zip from [Releases](../../releases) and unzip it into that folder. Windows "Extract All" adds a folder named after the zip to the path: remove that part so the path ends in `\Playrooms`. When it's right, the game folder looks like this (with the bundle):
 
    ```
    Playrooms
@@ -90,8 +89,6 @@ The full guide is in `BepInEx\plugins\PlayroomsNewGamePlus\README.txt` after ins
 
 4. Launch the game. The first launch applies a patch that lets BepInEx read the game. It takes a little longer, and when it is finished you will be at the main menu.
 5. Close and reopen the game one more time.
-
-Already have BepInEx 6 installed? Use the zip without `_WithBepInEx` and unzip it the same way.
 
 The included BepInEx is build be.793, unchanged. Its license and the licenses of the libraries it ships with are in `BepInEx\licenses`.
 
