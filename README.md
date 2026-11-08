@@ -9,15 +9,16 @@ Each mod works on its own, and they work together: New Game+ runs can be played 
 
 ## Downloads
 
-On the [Releases](../../releases) page, each release has three zips:
+On the [Releases](../../releases) page, each release has these zips. The `_WithBepInEx` ones include BepInEx, so there's nothing else to download:
 
 | Zip | Contains |
 |---|---|
-| `PlayroomsCoopNGPlus_Bundle_...zip` | Both mods |
-| `PlayroomsCoop_1.1.0.zip` | Co-op only |
-| `PlayroomsNewGamePlus_1.2.2.zip` | New Game+ only |
+| `PlayroomsCoopNGPlus_Bundle_..._WithBepInEx.zip` | Both mods + BepInEx (recommended) |
+| `PlayroomsCoop_1.1.0_WithBepInEx.zip` | Co-op + BepInEx |
+| `PlayroomsNewGamePlus_1.2.2_WithBepInEx.zip` | New Game+ + BepInEx |
+| The same three without `_WithBepInEx` | Just the mods, for anyone who already has BepInEx 6 installed |
 
-All three install the same way and include the same patcher, so mixing them is fine.
+All of them include the same patcher, so mixing them is fine.
 
 ## Co-op: main features
 
@@ -63,51 +64,36 @@ The full guide is in `BepInEx\plugins\PlayroomsNewGamePlus\README.txt` after ins
 ## Requirements
 
 - [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) (full game, Steam)
-- [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be), Unity IL2CPP x64 build
 - For co-op: every player needs the same mod versions, and you can only join or invite Steam friends who are playing Playrooms
 
 ## Installation
 
 1. Make sure Playrooms is closed before continuing!
-2. Download artifact **#791** of [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be). The page lists many files, so make sure you get this exact one:
-
-   `BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.791+b782da4.zip`
-
-   (Not Unity.Mono, and not x86.)
-3. Extract it into the Playrooms game folder. In Steam, right-click Playrooms > Manage > Browse local files to find it. Use the full game's folder, not `Playrooms Demo`.
-
-   Windows "Extract All" adds a folder named after the zip to the path. Remove that part so the path ends in `\Playrooms`. When it's right, these sit next to `Playrooms.exe`:
+2. Find the game folder: in Steam, right-click Playrooms > Manage > Browse local files. It's the folder with `Playrooms.exe`. Use the full game's folder, not `Playrooms Demo`.
+3. Download a `_WithBepInEx` zip from [Releases](../../releases) and unzip it into that folder. Windows "Extract All" adds a folder named after the zip to the path: remove that part so the path ends in `\Playrooms`. When it's right, the game folder looks like this (with the bundle):
 
    ```
    Playrooms
    ├── BepInEx
+   │   ├── patchers
+   │   │   └── PlayroomsPatcher
+   │   └── plugins
+   │       ├── PlayroomsCoop
+   │       └── PlayroomsNewGamePlus
    ├── dotnet
    ├── doorstop_config.ini
    ├── winhttp.dll
    └── Playrooms.exe
    ```
 
-4. Download a mod zip from [Releases](../../releases), open it, and drag the `BepInEx` folder from the zip into the same game folder. Let it merge with the existing `BepInEx` folder. With the bundle, it should look like this:
-
-   ```
-   Playrooms
-   └── BepInEx
-       ├── patchers
-       │   └── PlayroomsPatcher
-       │       └── PlayroomsPatcher.dll
-       └── plugins
-           ├── PlayroomsCoop
-           │   ├── PlayroomsCoop.dll
-           │   └── README.txt
-           └── PlayroomsNewGamePlus
-               ├── PlayroomsNewGamePlus.dll
-               └── README.txt
-   ```
-
    With only one mod, only that mod's folder is under `plugins`.
 
-5. Launch the game. The first launch applies a patch that lets BepInEx read the game. It takes a little longer, and when it is finished you will be at the main menu.
-6. Close and reopen the game one more time.
+4. Launch the game. The first launch applies a patch that lets BepInEx read the game. It takes a little longer, and when it is finished you will be at the main menu.
+5. Close and reopen the game one more time.
+
+Already have BepInEx 6 installed? Use the zip without `_WithBepInEx` and unzip it the same way.
+
+The included BepInEx is build be.793, unchanged. Its license and the licenses of the libraries it ships with are in `BepInEx\licenses`.
 
 ### Steam Deck and Linux
 
@@ -138,7 +124,7 @@ Once neither mod is left, also delete `BepInEx\patchers\PlayroomsPatcher`. Your 
 The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.0 loaded` or `Playrooms New Game Plus 1.2.2 loaded`, that mod is running.
 
 - **No log file, or the game starts like normal with no BepInEx:** BepInEx isn't loading. Check that `winhttp.dll` is right next to `Playrooms.exe` and not in a subfolder (see step 3). Some antivirus programs quarantine `winhttp.dll` because it loads mods. If yours did, restore it and add an exception. On Steam Deck or Linux, check the launch option above.
-- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 4, not in an extra folder such as `PlayroomsCoop_1.1.0\BepInEx`.
+- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 3, not in an extra folder such as `PlayroomsCoop_1.1.0\BepInEx`.
 - **Nothing happens when pressing F8:** click into the game window first, and check the log for the "loaded" line.
 - **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same mod versions.
 - **No New Game+ in the menu:** only saves that reached the end credits count.
