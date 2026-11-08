@@ -1,20 +1,20 @@
 # Playrooms Co-op
 
-Two-player online co-op for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
+Four Player online co-op for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
 
 ## Main features
 
-One player hosts and the other joins through an in-game menu (F8). You both play in the host's Playroom at the same time, and the joining player's own save is set aside and put back untouched afterwards.
+One player hosts and the others join through an in-game menu (F8). You all play in the host's Playroom at the same time, and the joining player's own saves are set aside and put back untouched afterwards.
 
 ### Shared between players
 
-- Both players appear as colored avatars with name tags
+- Players appear as colored avatars with name tags
 - Ball pickups, ball pits and vents are shared between players
 - One shared wallet, plus upgrades and shop purchases
 - Things bought in the world: vents, clock screens, robots and charging stations
 - Robots and vacuum devices (including the robots' voice lines)
 - You can even write on the whiteboard together. Maybe a game of tic-tac-toe?
-- If you're caught while your partner is safe, you wake up in the clean room instead of losing the run
+- If you're caught while your partners are safe, you wake up in the clean room instead of losing the run
 - Unstuck (pause menu) moves you next to your partner, or to the clean room if that isn't possible, with a 10 second cooldown
 - Balls stuck out of reach are moved back into play (this also works in solo)
 - Opening a hallway door no longer closes the other open ones, so you can work in different rooms
@@ -23,7 +23,7 @@ One player hosts and the other joins through an in-game menu (F8). You both play
 
 - [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/) (full game, Steam)
 - [BepInEx 6 Bleeding Edge](https://builds.bepinex.dev/projects/bepinex_be), Unity IL2CPP x64 build
-- Both players need this mod installed, at the same version
+- All players need this mod installed, at the same version
 - You can only join or invite Steam friends who are playing Playrooms
 
 ## Installation
