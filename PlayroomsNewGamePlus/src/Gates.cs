@@ -44,6 +44,7 @@ internal static class Gates
         R.Patch(skill, "UnlockSkill", 1, typeof(Hooks), nameof(Hooks.UnlockSkillPrefix), nameof(Hooks.UnlockSkillPostfix));
 
         R.Patch(R.T("TwoPixels.Windows95.Windows95Desktop"), "IsInstalled", 1, typeof(Hooks), null, nameof(Hooks.AppInstalledPostfix));
+        R.Patch(R.T("TwoPixels.Windows95.SupervisorMailbox"), "HasArrived", 1, typeof(Hooks), null, nameof(Hooks.MailArrivedPostfix));
     }
 
     public static bool IsOurRule(object rule)

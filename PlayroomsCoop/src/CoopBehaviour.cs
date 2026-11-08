@@ -18,6 +18,7 @@ namespace PlayroomsCoop
         internal static void OnLocalStartGame(bool freshStart)
         {
             var me = _instance;
+            if (me != null && me._menuOpen) me.SetMenu(false, Time.realtimeSinceStartup);
             if (me == null || me._role != Role.Host || !me._connected) return;
             HostSave.OnHostStartGame();
             var w = Protocol.W.Begin(Msg.HostStarting); w.U8(freshStart ? (byte)1 : (byte)0);
@@ -54,7 +55,7 @@ namespace PlayroomsCoop
 
         private float _joinStarted, _lastHello, _lastBeacon, _lastFriendRefresh, _lastAccept, _nextSend;
         private float _lastCamSearch, _lastErrorLog, _toastUntil;
-        private bool _menuOpen;
+        private bool _menuOpen, _wasInWorld;
         private bool _guiSeen, _guiWarned, _updateSeen;
         private float _menuOpenedAt;
         private static string _notice;
@@ -112,6 +113,9 @@ namespace PlayroomsCoop
                 _keys = new[] { Plugin.MenuKey.Value, KeyInput.H, KeyInput.L, KeyInput.Escape, KeyR, KeyK, KeyS, KeyY, KeyN, KeyC };
             }
             KeyInput.Poll(Application.isFocused, _keys);
+            bool inWorld = World.InGameWorld();
+            if (inWorld && !_wasInWorld && _menuOpen && now - _menuOpenedAt > 1f) SetMenu(false, now);
+            _wasInWorld = inWorld;
             if (KeyInput.Pressed(Plugin.MenuKey.Value)) SetMenu(!_menuOpen, now);
             if (_menuOpen && KeyInput.Pressed(KeyInput.Escape))
             {

@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework><AssemblyName>PlayroomsCoop</AssemblyName><RootNamespace>PlayroomsCoop</RootNamespace>
     <LangVersion>latest</LangVersion><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>disable</Nullable><ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems><DebugType>none</DebugType><Deterministic>true</Deterministic>
-    <Version>1.1.0</Version><TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Version>1.1.1</Version><TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup><Compile Include="src/*.cs" /></ItemGroup>
   <ItemGroup>
