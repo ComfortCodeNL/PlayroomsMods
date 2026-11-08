@@ -178,14 +178,12 @@ namespace PlayroomsCoop
 
         public static List<object> Items(object coll) => Items(coll, 0, -1, out _);
 
-        // sliceLen >= 0: only that many items, wrapping from sliceStart; total gets the full count
         public static List<object> Items(object coll, int sliceStart, int sliceLen, out int total)
         {
             total = -1;
             var list = new List<object>();
             if (coll == null) return list;
             if (coll is IEnumerable e) { foreach (var x in e) list.Add(x); return list; }
-            // il2cpp lists: Count + indexer is one call per item instead of MoveNext + Current
             var t = coll.GetType();
             if (!_indexers.TryGetValue(t, out var ix))
             {
@@ -298,7 +296,6 @@ namespace PlayroomsCoop
 
         public Feature(string name, bool enabled) { Name = name; Enabled = enabled; }
 
-        // a new world gets a fresh start; errors while the old one was unloading shouldn't carry over
         public void Rearm(bool enabled) { Enabled = enabled; _errors = 0; }
 
         public bool Try(Action a, string what)

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace PlayroomsCoop
 {
-    // School lockers. They ride on the door messages with an "L|" key, so older versions just ignore them.
     internal static partial class World
     {
         private const string LockerT = "TwoPixels.School.LockerDoor";
@@ -29,11 +28,11 @@ namespace PlayroomsCoop
                 if (!known || open == last) continue;
                 if (_doorIgnoreUntil.TryGetValue(kv.Key, out float until) && now < until) continue;
                 var w = Protocol.W.Begin(Msg.DoorState); w.Str(kv.Key); w.U8(open ? (byte)1 : (byte)0);
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
             }
         }
 
-        // SetOpen swings the door without firing Opened, so the balls inside are only launched once (by the opener)
+        // SetOpen skips the Opened event, so only the opener's locker launches its balls
         private static void ApplyLocker(string key, bool open, float now)
         {
             if (!_lockers.TryGetValue(key, out var locker) || !Alive(locker))

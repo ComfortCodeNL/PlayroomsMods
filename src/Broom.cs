@@ -10,25 +10,26 @@ namespace PlayroomsCoop
         public static Feature Broom;
 
         private struct SweepSample { public uint Seq; public float T; public Vector3 Pos, Dir; public float Speed; }
-        private static uint _sweepSeq, _lastRemoteSeq;
-        private static bool _haveRemoteSeq;
+        private static uint _sweepSeq;
 
         private static object _localShovel;
         private static Transform _localShovelBody;
         private static readonly List<SweepSample> _outSweep = new List<SweepSample>();
         private static float _lastLocalSweep = -99f, _sweepRadius = 3f, _nextRadiusRead;
         private static Vector3 _lastLocalSweepPos;
-        private static bool _peerBroom;
 
-        private static readonly List<SweepSample> _inSweep = new List<SweepSample>();
-        private static float _lastRemoteSweep = -99f, _lastRemoteSweepT = -99f;
-        private static Vector3 _lastRemoteSweepPos;
+        private sealed class RemoteBroom
+        {
+            public readonly List<SweepSample> In = new List<SweepSample>();
+            public uint LastSeq; public bool HaveSeq;
+            public float LastSweep = -99f; public Vector3 LastPos;
+            public GameObject Proxy; public object State;
+            public readonly Dictionary<string, object> Scratch = new Dictionary<string, object>();
+        }
+        private static readonly Dictionary<ulong, RemoteBroom> _remoteBrooms = new Dictionary<ulong, RemoteBroom>();
         private static bool _replaying, _capsSent, _canReplay;
         private static float _nextCapsCheck;
-        private static GameObject _broomProxy;
-        private static object _remoteState;
         private static readonly string[] SwapFields = { "_sweptBalls", "_inSightBalls", "_blockedUntil" };
-        private static readonly Dictionary<string, object> _remoteScratch = new Dictionary<string, object>();
         private static int _replays;
 
         private static void BroomInit()
@@ -38,11 +39,11 @@ namespace PlayroomsCoop
 
         private static void BroomReset()
         {
-            _outSweep.Clear(); _inSweep.Clear();
-            _peerBroom = false; _capsSent = false; _canReplay = false;
-            _lastLocalSweep = _lastRemoteSweep = _lastRemoteSweepT = -99f;
-            _haveRemoteSeq = false;
-            _remoteState = null; _remoteScratch.Clear();
+            _outSweep.Clear();
+            foreach (var rb in _remoteBrooms.Values) if (rb.Proxy != null) UnityEngine.Object.Destroy(rb.Proxy);
+            _remoteBrooms.Clear();
+            _capsSent = false; _canReplay = false;
+            _lastLocalSweep = -99f;
         }
 
         internal static void OnLocalSweep(object shovel, Vector3 dir, float speed)
@@ -60,7 +61,7 @@ namespace PlayroomsCoop
                 float now = Time.realtimeSinceStartup;
                 _lastLocalSweep = now;
                 _lastLocalSweepPos = _localShovelBody.position;
-                if (!_peerBroom || !Broom.Enabled) return;
+                if (!PeerBroom() || !Broom.Enabled) return;
                 if (_outSweep.Count < 64)
                     _outSweep.Add(new SweepSample { Seq = ++_sweepSeq, T = now, Pos = _lastLocalSweepPos, Dir = dir, Speed = speed });
             }
@@ -81,7 +82,7 @@ namespace PlayroomsCoop
                     w.U32(s.Seq); w.F32(s.T); w.F32(s.Pos.x); w.F32(s.Pos.y); w.F32(s.Pos.z);
                     w.F32(s.Dir.x); w.F32(s.Dir.y); w.F32(s.Dir.z); w.F32(s.Speed);
                 }
-                w.SendTo(_peer, SteamNet.SendUnreliable);
+                w.SendAll(SteamNet.SendUnreliable);
             }
             _outSweep.Clear();
         }
@@ -90,14 +91,22 @@ namespace PlayroomsCoop
 
         private static bool LocalSweepNear(Vector3 p, float now)
         {
-            if (!_peerBroom || now - _lastLocalSweep > 1.5f) return false;
+            if (!PeerBroom() || now - _lastLocalSweep > 1.5f) return false;
             return HDist(p, _lastLocalSweepPos) < _sweepRadius + 1.5f;
         }
 
         private static bool RemoteSweepNear(Vector3 p, float now)
         {
-            if (!_canReplay || now - _lastRemoteSweep > 1.5f) return false;
-            return HDist(p, _lastRemoteSweepPos) < _sweepRadius + 1.5f;
+            if (!_canReplay) return false;
+            foreach (var rb in _remoteBrooms.Values)
+                if (now - rb.LastSweep <= 1.5f && HDist(p, rb.LastPos) < _sweepRadius + 1.5f) return true;
+            return false;
+        }
+
+        private static bool PeerBroom()
+        {
+            foreach (var pr in Net.Peers.Values) if (pr.BroomReplay) return true;
+            return false;
         }
 
         private static void BroomCapsTick(float now)
@@ -114,8 +123,8 @@ namespace PlayroomsCoop
             {
                 _canReplay = can; _capsSent = true;
                 var w = Protocol.W.Begin(Msg.BroomCaps); w.U8(can ? (byte)1 : (byte)0);
-                w.SendTo(_peer, SteamNet.SendReliable);
-                Plugin.Log.LogInfo(can ? "[Broom] partner's broom will be replayed here" : "[Broom] can't replay the partner's broom here; using live ball positions");
+                w.SendAll(SteamNet.SendReliable);
+                Plugin.Log.LogInfo(can ? "[Broom] other players' brooms will be replayed here" : "[Broom] can't replay other players' brooms here; using live ball positions");
             }
         }
 
@@ -130,7 +139,8 @@ namespace PlayroomsCoop
             if (now < _nextShovelFind) return null;
             _nextShovelFind = now + 2f;
             _localShovel = MenuInput.FindPlayerBehaviour("ShovelBehaviour");
-            _localShovelBody = null; _remoteState = null; _remoteScratch.Clear();
+            _localShovelBody = null;
+            foreach (var rb in _remoteBrooms.Values) { rb.State = null; rb.Scratch.Clear(); }
             _shovelWorld = _localShovel != null ? world : IntPtr.Zero;
             return _localShovel;
         }
@@ -138,9 +148,10 @@ namespace PlayroomsCoop
         private static void OnSweepMessage(byte[] buf, int len)
         {
             if (!_canReplay) return;
+            ulong from = Net.Sender;
+            if (!_remoteBrooms.TryGetValue(from, out var rb)) _remoteBrooms[from] = rb = new RemoteBroom();
             var r = new Reader(buf, len, Protocol.HeaderSize);
             int n = r.U8();
-            float now = Time.realtimeSinceStartup;
             for (int i = 0; i < n; i++)
             {
                 var s = new SweepSample
@@ -151,54 +162,58 @@ namespace PlayroomsCoop
                     Dir = new Vector3(r.F32(), r.F32(), r.F32()),
                     Speed = r.F32(),
                 };
-                float off = now - s.T;
-                if (!_hasClockOffset || off < _clockOffset) { _clockOffset = off; _hasClockOffset = true; }
-                if (_haveRemoteSeq && (int)(s.Seq - _lastRemoteSeq) <= 0) continue;
-                int at = _inSweep.Count;
-                while (at > 0 && (int)(_inSweep[at - 1].Seq - s.Seq) > 0) at--;
-                if (at > 0 && _inSweep[at - 1].Seq == s.Seq) continue;
-                _inSweep.Insert(at, s);
+                s.T += Net.Offset(from, s.T);
+                if (rb.HaveSeq && (int)(s.Seq - rb.LastSeq) <= 0) continue;
+                int at = rb.In.Count;
+                while (at > 0 && (int)(rb.In[at - 1].Seq - s.Seq) > 0) at--;
+                if (at > 0 && rb.In[at - 1].Seq == s.Seq) continue;
+                rb.In.Insert(at, s);
             }
-            if (_inSweep.Count > 200) _inSweep.RemoveRange(0, _inSweep.Count - 200);
+            if (rb.In.Count > 200) rb.In.RemoveRange(0, rb.In.Count - 200);
         }
 
         public static void FixedTick()
         {
-            if (!_connected || !_canReplay || _inSweep.Count == 0) return;
-            Broom.Try(ReplayDue, "replay partner's broom");
-        }
-
-        private static void ReplayDue()
-        {
-            float renderT = Time.realtimeSinceStartup - _clockOffset - InterpDelay;
-            if (_inSweep[0].T > renderT) return;
-            int budget = _inSweep.Count > 6 ? 3 : _inSweep.Count > 2 ? 2 : 1;
-            for (int i = 0; i < budget && _inSweep.Count > 0; i++)
+            if (!_connected || !_canReplay || _remoteBrooms.Count == 0) return;
+            foreach (var kv in _remoteBrooms)
             {
-                var s = _inSweep[0];
-                _inSweep.RemoveAt(0);
-                _lastRemoteSweepT = s.T; _lastRemoteSeq = s.Seq; _haveRemoteSeq = true;
-                if (renderT - s.T > 1.5f) continue;
-                ReplayOne(s);
+                if (kv.Value.In.Count == 0) continue;
+                var rb = kv.Value;
+                Broom.Try(() => ReplayDue(rb), "replay other player's broom");
             }
         }
 
-        private static void ReplayOne(SweepSample s)
+        private static void ReplayDue(RemoteBroom rb)
+        {
+            float renderT = Time.realtimeSinceStartup - InterpDelay;
+            if (rb.In[0].T > renderT) return;
+            int budget = rb.In.Count > 6 ? 3 : rb.In.Count > 2 ? 2 : 1;
+            for (int i = 0; i < budget && rb.In.Count > 0; i++)
+            {
+                var s = rb.In[0];
+                rb.In.RemoveAt(0);
+                rb.LastSeq = s.Seq; rb.HaveSeq = true;
+                if (renderT - s.T > 1.5f) continue;
+                ReplayOne(rb, s);
+            }
+        }
+
+        private static void ReplayOne(RemoteBroom rb, SweepSample s)
         {
             var shovel = FindShovel();
             if (shovel == null) return;
-            if (_broomProxy == null)
+            if (rb.Proxy == null)
             {
-                _broomProxy = new GameObject("PlayroomsCoop_PartnerBroom");
-                UnityEngine.Object.DontDestroyOnLoad(_broomProxy);
+                rb.Proxy = new GameObject("PlayroomsCoop_OtherBroom");
+                UnityEngine.Object.DontDestroyOnLoad(rb.Proxy);
             }
-            _broomProxy.transform.position = s.Pos;
-            _lastRemoteSweep = Time.realtimeSinceStartup;
-            _lastRemoteSweepPos = s.Pos;
+            rb.Proxy.transform.position = s.Pos;
+            rb.LastSweep = Time.realtimeSinceStartup;
+            rb.LastPos = s.Pos;
 
             var body = R.Get(shovel, "_playerTransform");
             var state = R.Get(shovel, "ShovelBehaviourState");
-            if (_remoteState == null && state != null) _remoteState = NewLike(state);
+            if (rb.State == null && state != null) rb.State = NewLike(state);
             var local = new Dictionary<string, object>();
             foreach (var f in SwapFields)
             {
@@ -206,23 +221,23 @@ namespace PlayroomsCoop
                 var v = R.Get(shovel, f);
                 if (v == null) continue;
                 local[f] = v;
-                if (!_remoteScratch.ContainsKey(f)) _remoteScratch[f] = NewLike(v);
+                if (!rb.Scratch.ContainsKey(f)) rb.Scratch[f] = NewLike(v);
             }
 
             _replaying = true; _applying = true;
             try
             {
-                R.Set(shovel, "_playerTransform", _broomProxy.transform);
-                foreach (var f in local.Keys) R.Set(shovel, f, _remoteScratch[f]);
-                if (_remoteState != null) R.Set(shovel, "ShovelBehaviourState", _remoteState);
+                R.Set(shovel, "_playerTransform", rb.Proxy.transform);
+                foreach (var f in local.Keys) R.Set(shovel, f, rb.Scratch[f]);
+                if (rb.State != null) R.Set(shovel, "ShovelBehaviourState", rb.State);
                 R.Call(shovel, "Sweep", s.Dir, s.Speed);
-                if (_replays++ == 0) Plugin.Log.LogInfo("[Broom] replaying the partner's broom");
+                if (_replays++ == 0) Plugin.Log.LogInfo("[Broom] replaying another player's broom");
             }
             finally
             {
                 try { R.Set(shovel, "_playerTransform", body); } catch { }
                 foreach (var kv in local) { try { R.Set(shovel, kv.Key, kv.Value); } catch { } }
-                try { if (_remoteState != null) R.Set(shovel, "ShovelBehaviourState", state); } catch { }
+                try { if (rb.State != null) R.Set(shovel, "ShovelBehaviourState", state); } catch { }
                 _replaying = false; _applying = false;
             }
         }

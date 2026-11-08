@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Il2CppInterop.Runtime.Attributes;
 using UnityEngine;
 
@@ -10,14 +11,18 @@ namespace PlayroomsCoop
         public CoopBehaviour(IntPtr ptr) : base(ptr) { _instance = this; }
         private static CoopBehaviour _instance;
 
+        internal static bool ApiConnected => _instance != null && _instance._connected;
+        internal static bool ApiIsHost => ApiConnected && _instance._role == Role.Host;
+        internal static bool ApiIsGuest => ApiConnected && _instance._role == Role.Client;
+
         internal static void OnLocalStartGame(bool freshStart)
         {
             var me = _instance;
             if (me == null || me._role != Role.Host || !me._connected) return;
             HostSave.OnHostStartGame();
             var w = Protocol.W.Begin(Msg.HostStarting); w.U8(freshStart ? (byte)1 : (byte)0);
-            w.SendTo(me._peer, SteamNet.SendReliable);
-            Plugin.Log.LogInfo("Host is starting the game: telling Player 2 to load in");
+            w.SendAll(SteamNet.SendReliable);
+            Plugin.Log.LogInfo("Host is starting the game: telling the other players to load in");
         }
 
         private enum Role { None, Host, Client }
@@ -27,16 +32,14 @@ namespace PlayroomsCoop
         private const float PeerTimeout = 10f;
         private const float InviteLife = 30f;
 
-        private const int KeyR = 0x52, KeyK = 0x4B, KeyS = 0x53, KeyY = 0x59, KeyN = 0x4E;
+        private const int KeyR = 0x52, KeyK = 0x4B, KeyS = 0x53, KeyY = 0x59, KeyN = 0x4E, KeyC = 0x43;
 
         private Role _role;
-        private ulong _peer;
-        private string _peerName = "";
         private bool _connected;
         private bool _playing;
         private bool _worldStarted;
         private bool _restoredAtStart;
-        private bool _meReady, _peerReady;
+        private bool _meReady;
         private ulong _joinTarget;
         private uint _joinNonce;
 
@@ -49,7 +52,7 @@ namespace PlayroomsCoop
         private float _confirmUntil;
         private View _view = View.Main;
 
-        private float _joinStarted, _lastHello, _lastRecv, _lastBeacon, _lastFriendRefresh, _lastAccept, _nextSend;
+        private float _joinStarted, _lastHello, _lastBeacon, _lastFriendRefresh, _lastAccept, _nextSend;
         private float _lastCamSearch, _lastErrorLog, _toastUntil;
         private bool _menuOpen;
         private bool _guiSeen, _guiWarned, _updateSeen;
@@ -69,11 +72,11 @@ namespace PlayroomsCoop
         private readonly Dictionary<ulong, (float time, byte version)> _modSeen = new Dictionary<ulong, (float, byte)>();
         private float _lastModHello, _steamReadyAt = -1f;
 
-        private Avatar _local, _remote;
+        private Avatar _local;
+        private readonly Dictionary<ulong, Avatar> _avatars = new Dictionary<ulong, Avatar>();
         private Camera _cam;
         private float _eyeH = 1.6f;
         private uint _seq;
-        private bool _remoteInWorld;
         private float _bodyEyeOffset, _attachedYaw, _attachedPitch;
         private bool _hasBodyOffset;
         private PoseState _lastPose = new PoseState { EyeHeight = 1.6f };
@@ -106,7 +109,7 @@ namespace PlayroomsCoop
 
             if (_keys == null)
             {
-                _keys = new[] { Plugin.MenuKey.Value, KeyInput.H, KeyInput.L, KeyInput.Escape, KeyR, KeyK, KeyS, KeyY, KeyN };
+                _keys = new[] { Plugin.MenuKey.Value, KeyInput.H, KeyInput.L, KeyInput.Escape, KeyR, KeyK, KeyS, KeyY, KeyN, KeyC };
             }
             KeyInput.Poll(Application.isFocused, _keys);
             if (KeyInput.Pressed(Plugin.MenuKey.Value)) SetMenu(!_menuOpen, now);
@@ -148,7 +151,7 @@ namespace PlayroomsCoop
                 _lastAccept = now;
                 foreach (var f in _friends) SteamNet.Accept(f.Id);
                 if (_joinTarget != 0) SteamNet.Accept(_joinTarget);
-                if (_peer != 0) SteamNet.Accept(_peer);
+                foreach (var id in Net.Peers.Keys) SteamNet.Accept(id);
             }
 
             if (_steamReadyAt < 0f) _steamReadyAt = now;
@@ -170,21 +173,25 @@ namespace PlayroomsCoop
                     if (now - _lastBeacon > 2f)
                     {
                         _lastBeacon = now;
+                        bool open = Net.Peers.Count < Net.MaxPlayers - 1;
                         foreach (var f in _friends)
                         {
-                            var w = Protocol.W.Begin(Msg.Beacon); w.U8(_connected ? (byte)0 : (byte)1);
+                            var w = Protocol.W.Begin(Msg.Beacon); w.U8(open ? (byte)1 : (byte)0);
                             w.SendTo(f.Id, SteamNet.SendUnreliable);
                         }
                     }
-                    if (_invitedFriend != 0 && !_connected)
+                    if (_invitedFriend != 0)
                     {
-                        if (now - _invitedAt > InviteLife) { SetStatus($"{SteamNet.NameOf(_invitedFriend)} didn't answer the invite."); _invitedFriend = 0; }
+                        if (Net.Peers.ContainsKey(_invitedFriend)) _invitedFriend = 0;
+                        else if (now - _invitedAt > InviteLife) { SetStatus($"{SteamNet.NameOf(_invitedFriend)} didn't answer the invite."); _invitedFriend = 0; }
                         else if (now - _lastInviteSend > 3f)
                         {
                             _lastInviteSend = now;
                             Protocol.SendSimple(_invitedFriend, Msg.Invite, SteamNet.SendReliable);
                         }
                     }
+                    foreach (var p in new List<Net.Peer>(Net.Peers.Values))
+                        if (now - p.LastRecv > PeerTimeout) { SetStatus($"Lost connection to {p.Name}."); RemovePeer(p.Id, true); }
                     break;
 
                 case Role.Client:
@@ -193,7 +200,7 @@ namespace PlayroomsCoop
                         if (now - _lastHello > 1f)
                         {
                             _lastHello = now;
-                            Protocol.SendHello(_joinTarget, _joinNonce);
+                            SendHello();
                         }
                         if (now - _joinStarted > JoinTimeout)
                         {
@@ -201,31 +208,44 @@ namespace PlayroomsCoop
                             ResetSession();
                         }
                     }
+                    else
+                    {
+                        var host = Net.Get(Net.HostId);
+                        if (host == null || now - host.LastRecv > PeerTimeout)
+                        {
+                            SetStatus($"Lost connection to {(host != null ? host.Name : "the host")}.");
+                            ResetSession();
+                        }
+                    }
                     break;
-            }
-
-            if (_connected && now - _lastRecv > PeerTimeout)
-            {
-                SetStatus($"Lost connection to {_peerName}.");
-                DropPeer();
             }
 
             if (_connected) { Perf.Begin("poses/avatars"); try { UpdatePoses(now, dt); } finally { Perf.End(); } }
             Perf.Begin("host save");
-            try { if (_connected && _role == Role.Host) HostSave.HostTick(now, _playing, _peer); } finally { Perf.End(); }
+            try { if (_connected && _role == Role.Host) HostSave.HostTick(now, _playing, new List<ulong>(Net.Peers.Keys)); } finally { Perf.End(); }
             if (_role != Role.Host) HostSave.ClientTick(now);
             HostSave.SelfCheck(now);
-            if (_connected && _role == Role.Client) HostSave.ClientResendTick(now, _peer);
-            if (_connected && _playing && !_worldStarted && _role == Role.Client && HostSave.GuestLoaded && World.InGameWorld())
+            if (_connected && _role == Role.Client) HostSave.ClientResendTick(now, Net.HostId);
+            if (_connected && _playing && !_worldStarted && _role == Role.Client && (HostSave.GuestLoaded || !HostSave.Enabled) && World.InGameWorld())
             {
                 StartWorld();
-                Protocol.SendSimple(_peer, Msg.WorldReady, SteamNet.SendReliable);
+                Protocol.SendSimple(Net.HostId, Msg.WorldReady, SteamNet.SendReliable);
             }
             ClientMenuCheck(now);
             ClockGate();
             ClockHold();
             World.Tick(now, dt);
+            CoopApi.Tick(now);
         }
+
+        private void SendHello()
+        {
+            var w = Protocol.W.Begin(Msg.Hello); w.U32(_joinNonce); w.Str(SteamNet.MyName); w.U8(ColorByte(Net.MyColor));
+            w.SendTo(_joinTarget, SteamNet.SendReliable);
+        }
+
+        private static byte ColorByte(int c) => c < 0 || c > 254 ? (byte)255 : (byte)c;
+        private static int ColorFromByte(byte b) => b == 255 ? -1 : b;
 
         [HideFromIl2Cpp]
         private void OnMessage(ulong from, byte[] buf, int len)
@@ -234,6 +254,9 @@ namespace PlayroomsCoop
             if (!Protocol.TryReadHeader(buf, len, out Msg type)) return;
             float now = Now;
             _modSeen[from] = (now, Protocol.Version);
+            var peer = Net.Get(from);
+            if (peer != null) peer.LastRecv = now;
+            Net.Sender = from;
 
             switch (type)
             {
@@ -257,23 +280,23 @@ namespace PlayroomsCoop
                 case Msg.Hello:
                 {
                     if (_role != Role.Host) break;
-                    uint nonce = Protocol.ReadHello(buf, len);
-                    if (_peer == 0 || _peer == from)
-                    {
-                        bool isNew = !_connected;
-                        Protocol.SendWelcome(from, true, nonce);
-                        if (isNew) Connect(from, now);
-                    }
-                    else Protocol.SendWelcome(from, false, nonce);
+                    var r = new Reader(buf, len, Protocol.HeaderSize);
+                    uint nonce = r.U32();
+                    string name = r.Remaining > 2 ? r.Str() : SteamNet.NameOf(from);
+                    int color = r.Remaining > 0 ? ColorFromByte(r.U8()) : -1;
+                    if (peer == null && Net.Peers.Count >= Net.MaxPlayers - 1) { Protocol.SendWelcome(from, false, nonce, 0); break; }
+                    if (peer == null) peer = AddPeer(from, name, color, now);
+                    Protocol.SendWelcome(from, true, nonce, peer.Slot);
+                    SendRoster();
                     break;
                 }
 
                 case Msg.Welcome:
                 {
                     if (_role != Role.Client || from != _joinTarget || _connected) break;
-                    bool accepted = Protocol.ReadWelcome(buf, len, out uint nonce);
+                    bool accepted = Protocol.ReadWelcome(buf, len, out uint nonce, out int slot);
                     if (nonce != _joinNonce) break;
-                    if (accepted) Connect(from, now);
+                    if (accepted) ConnectAsClient(from, slot, now);
                     else
                     {
                         SetStatus($"{SteamNet.NameOf(from)}'s lobby is full.");
@@ -282,114 +305,205 @@ namespace PlayroomsCoop
                     break;
                 }
 
-                case Msg.Ready:
-                    if (!_connected || from != _peer) break;
-                    _lastRecv = now;
-                    _peerReady = len > Protocol.HeaderSize && buf[Protocol.HeaderSize] == 1;
-                    TryStartPlaying();
+                case Msg.Roster:
+                    if (_role != Role.Client || from != Net.HostId || !_connected) break;
+                    ApplyRoster(buf, len, now);
                     break;
 
+                case Msg.LobbyState:
+                {
+                    if (_role != Role.Host || peer == null) break;
+                    var r = new Reader(buf, len, Protocol.HeaderSize);
+                    peer.Ready = r.U8() == 1;
+                    peer.Color = ColorFromByte(r.U8());
+                    SendRoster();
+                    TryStartPlaying();
+                    break;
+                }
+
                 case Msg.HostStarting:
-                    if (from != _peer || _role != Role.Client) break;
-                    _lastRecv = now;
+                    if (from != Net.HostId || _role != Role.Client) break;
                     if (HostSave.Enabled) Notify("The host is loading: you'll join their world in a moment");
                     else AutoLoad();
                     break;
 
                 case Msg.SaveOffer:
                 case Msg.SaveChunk:
-                    if (from != _peer || _role != Role.Client) break;
-                    _lastRecv = now;
+                    if (from != Net.HostId || _role != Role.Client) break;
                     HostSave.Handle(type, buf, len);
                     break;
 
                 case Msg.SaveResend:
-                    if (from != _peer || _role != Role.Host) break;
-                    _lastRecv = now;
-                    HostSave.HandleResend(buf, len);
+                    if (peer == null || _role != Role.Host) break;
+                    HostSave.HandleResend(from, buf, len);
                     break;
 
                 case Msg.WorldReady:
-                    if (from != _peer || _role != Role.Host || !_worldStarted) break;
-                    _lastRecv = now;
+                    if (peer == null || _role != Role.Host || !_worldStarted) break;
                     World.OnDisconnected();
-                    World.OnConnected(_peer, true);
-                    Plugin.Log.LogInfo("Player 2 is in the host's world: world sharing re-synced");
+                    World.OnConnected(true);
+                    Plugin.Log.LogInfo($"{peer.Name} is in the host's world: world sharing re-synced");
                     break;
 
                 case Msg.Kick:
-                    if (from != _peer || _role != Role.Client) break;
-                    SetStatus($"{_peerName} removed you from the game.");
+                    if (from != Net.HostId || _role != Role.Client) break;
+                    SetStatus($"{Net.NameOf(from)} removed you from the game.");
                     Notify("You were removed from the game");
                     ResetSession();
                     break;
 
                 case Msg.State:
-                    if (!_connected || from != _peer) break;
+                {
+                    if (!_connected || peer == null) break;
                     if (!Protocol.ReadState(buf, len, out PoseState s)) break;
-                    _lastRecv = now;
                     if (s.Seq == 0) break;
-                    EnsureAvatars();
-                    _remoteInWorld = s.InWorld; World.RemoteInWorld = s.InWorld;
-                    if (s.InWorld) { _remote.SetTarget(s); _remote.SetBroom(s.Sweeping && Plugin.ShowBroom.Value); }
-                    else _remote.SetVisible(false);
+                    var av = AvatarFor(peer);
+                    peer.InWorld = s.InWorld;
+                    if (s.InWorld) { av.SetTarget(s); av.SetBroom(s.Sweeping && Plugin.ShowBroom.Value); }
+                    else av.SetVisible(false);
+                    break;
+                }
+
+                case Msg.ModCounterTake:
+                case Msg.ModCounterResult:
+                    if (!_connected || peer == null) break;
+                    CoopApi.Handle(type, from, buf, len);
                     break;
 
                 default:
-                    if (!_connected || from != _peer) break;
-                    _lastRecv = now;
+                    if (!_connected || peer == null) break;
                     if (_worldStarted) World.Handle(type, buf, len);
                     break;
 
                 case Msg.Bye:
-                    if (from != _peer) break;
-                    SetStatus($"{_peerName} left.");
-                    DropPeer();
+                    if (peer == null) break;
+                    if (_role == Role.Client && from == Net.HostId) { SetStatus($"{peer.Name} closed the game."); ResetSession(); }
+                    else if (_role == Role.Host) { SetStatus($"{peer.Name} left."); RemovePeer(from, true); }
                     break;
             }
+            Net.Sender = 0;
         }
 
         [HideFromIl2Cpp]
-        private void Connect(ulong peer, float now)
+        private Net.Peer AddPeer(ulong id, string name, int color, float now)
         {
-            _peer = peer;
-            _peerName = SteamNet.NameOf(peer);
+            int slot = 1;
+            while (slot < Net.MaxPlayers && Net.Peers.Values.Any(p => p.Slot == slot)) slot++;
+            var peer = new Net.Peer { Id = id, Slot = slot, Name = string.IsNullOrEmpty(name) ? SteamNet.NameOf(id) : name, Color = color, LastRecv = now };
+            Net.Peers[id] = peer;
+            bool first = !_connected;
             _connected = true;
-            _playing = false; _meReady = false; _peerReady = false;
-            _invitedFriend = 0; _inviteFrom = 0;
-            _lastRecv = now;
+            if (_invitedFriend == id) _invitedFriend = 0;
+            _inviteFrom = 0;
             _toastUntil = now + 6f;
-            SetStatus($"{_peerName} is in the lobby. Press Ready when you're set.");
-            Plugin.Log.LogInfo($"Connected with {_peerName} ({peer}) as {(_role == Role.Host ? "Player 1" : "Player 2")}");
+            SetStatus(_playing ? $"{peer.Name} is joining your game." : $"{peer.Name} joined the lobby. Press Ready when everyone's set.");
+            Plugin.Log.LogInfo($"{peer.Name} ({id}) joined as Player {slot + 1}");
+            if (first) { EnsureAvatars(); HostSave.OnConnected(); SetMenu(true, now); }
+            if (_worldStarted) World.OnPeerJoined();
+            return peer;
+        }
+
+        [HideFromIl2Cpp]
+        private void RemovePeer(ulong id, bool announce)
+        {
+            if (!Net.Peers.Remove(id)) return;
+            SteamNet.Close(id);
+            if (_avatars.TryGetValue(id, out var av)) { av.Destroy(); _avatars.Remove(id); }
+            HostSave.OnPeerLeft(id);
+            if (_worldStarted) World.OnPeerLeft(id);
+            if (_role == Role.Host)
+            {
+                if (announce) SendRoster();
+                if (Net.Peers.Count == 0) EndHostSession();
+            }
+        }
+
+        private void EndHostSession()
+        {
+            _connected = false; ClockGateRelease();
+            if (_worldStarted) World.OnDisconnected();
+            HostSave.OnDisconnected();
+            _playing = false; _worldStarted = false; _meReady = false;
+            DestroyAvatars();
+        }
+
+        private void SendRoster()
+        {
+            if (_role != Role.Host) return;
+            var w = Protocol.W.Begin(Msg.Roster);
+            w.U8(_playing ? (byte)1 : (byte)0);
+            w.U8((byte)(Net.Peers.Count + 1));
+            w.U64(Net.Me); w.U8(0); w.U8(_meReady ? (byte)1 : (byte)0); w.U8(ColorByte(Net.MyColor)); w.Str(SteamNet.MyName);
+            foreach (var p in Net.Peers.Values) { w.U64(p.Id); w.U8((byte)p.Slot); w.U8(p.Ready ? (byte)1 : (byte)0); w.U8(ColorByte(p.Color)); w.Str(p.Name); }
+            w.SendAll(SteamNet.SendReliable);
+            RefreshAvatarColors();
+        }
+
+        [HideFromIl2Cpp]
+        private void ApplyRoster(byte[] buf, int len, float now)
+        {
+            var r = new Reader(buf, len, Protocol.HeaderSize);
+            bool playing = r.U8() == 1;
+            int n = r.U8();
+            var seen = new HashSet<ulong>();
+            bool added = false;
+            for (int i = 0; i < n; i++)
+            {
+                ulong id = r.U64(); int slot = r.U8(); bool ready = r.U8() == 1; int color = ColorFromByte(r.U8()); string name = r.Str();
+                if (id == Net.Me) { Net.MySlot = slot; continue; }
+                seen.Add(id);
+                var p = Net.Get(id);
+                if (p == null)
+                {
+                    p = new Net.Peer { Id = id, LastRecv = now };
+                    Net.Peers[id] = p; added = true;
+                    SteamNet.Accept(id);
+                    if (id != Net.HostId) Plugin.Log.LogInfo($"{name} is in the game as Player {slot + 1}");
+                }
+                p.Slot = slot; p.Ready = ready; p.Color = color; p.Name = name;
+                if (id != Net.HostId && p.LastRecv < now - PeerTimeout) p.LastRecv = now;
+            }
+            foreach (var id in new List<ulong>(Net.Peers.Keys)) if (!seen.Contains(id)) RemovePeer(id, false);
+            if (added && _worldStarted) World.OnPeerJoined();
+            if (playing && !_playing)
+            {
+                _playing = true;
+                Plugin.Log.LogInfo("The host started the game");
+                SetStatus(HostSave.Enabled ? "Starting. Waiting for the host's world..." : "Starting. Load your game to join.");
+            }
+            RefreshAvatarColors();
+        }
+
+        [HideFromIl2Cpp]
+        private void ConnectAsClient(ulong host, int slot, float now)
+        {
+            _connected = true;
+            Net.HostId = host; Net.IsHost = false; Net.MySlot = slot;
+            Net.Peers[host] = new Net.Peer { Id = host, Slot = 0, Name = SteamNet.NameOf(host), LastRecv = now };
+            _playing = false; _meReady = false;
+            _invitedFriend = 0; _inviteFrom = 0;
+            _toastUntil = now + 6f;
+            SetStatus($"In {SteamNet.NameOf(host)}'s lobby. Press Ready when you're set.");
+            Plugin.Log.LogInfo($"Connected to {SteamNet.NameOf(host)} ({host}) as Player {slot + 1}");
             EnsureAvatars();
             _worldStarted = false;
             HostSave.OnConnected();
+            SendLobbyState();
             SetMenu(true, now);
-        }
-
-        private void DropPeer()
-        {
-            _connected = false; ClockGateRelease();
-            if (_peer != 0) SteamNet.Close(_peer);
-            if (_worldStarted) World.OnDisconnected();
-            HostSave.OnDisconnected();
-            _peer = 0;
-            _connected = false; _playing = false; _worldStarted = false; _meReady = false; _peerReady = false;
-            DestroyAvatars();
-            if (_role == Role.Client) { _role = Role.None; _joinTarget = 0; }
         }
 
         private void ResetSession()
         {
             _connected = false; ClockGateRelease();
-            if (_peer != 0) SteamNet.Close(_peer);
+            foreach (var id in Net.Peers.Keys) SteamNet.Close(id);
+            if (_joinTarget != 0) SteamNet.Close(_joinTarget);
             if (_worldStarted) World.OnDisconnected();
             HostSave.OnDisconnected();
             _role = Role.None;
-            _peer = 0;
+            Net.Reset();
             _joinTarget = 0;
             _invitedFriend = 0;
-            _connected = false; _playing = false; _meReady = false; _peerReady = false;
+            _playing = false; _worldStarted = false; _meReady = false;
             DestroyAvatars();
         }
 
@@ -443,7 +557,7 @@ namespace PlayroomsCoop
             World.OnDisconnected();
             HostSave.OnClientBackInMenu();
             Plugin.Log.LogInfo("Back in the main menu: waiting for the host's next game");
-            SetStatus($"Waiting for {_peerName} to start or continue a game.");
+            SetStatus($"Waiting for {Net.NameOf(Net.HostId)} to start or continue a game.");
         }
 
         private object _dayService;
@@ -455,7 +569,7 @@ namespace PlayroomsCoop
             float now = Now;
             if (now < _nextClockCheck) return;
             _nextClockCheck = now + 0.5f;
-            bool wantPause = _connected && World.InGameWorld() && !(_playing && _remoteInWorld);
+            bool wantPause = _connected && World.InGameWorld() && !(_playing && Net.Peers.Values.All(p => p.InWorld));
             try
             {
                 if (!World.Alive(_dayService))
@@ -472,8 +586,8 @@ namespace PlayroomsCoop
                     _pinPhase = Convert.ToInt32(R.Get(_dayService, "_phase"));
                     _pinTimer = R.Get<float>(_dayService, "_timer");
                 }
-                Plugin.Log.LogInfo(wantPause ? "Day clock held until both players are in the world" : "Both players in the world: day clock running");
-                if (wantPause) Notify("Clock paused: waiting for your partner to load in");
+                Plugin.Log.LogInfo(wantPause ? "Day clock held until everyone is in the world" : "Everyone is in the world: day clock running");
+                if (wantPause) Notify("Clock paused: waiting for everyone to load in");
             }
             catch (Exception e) { Plugin.Log.LogWarning("Day clock hold: " + e.Message); _clockPausedByUs = false; }
         }

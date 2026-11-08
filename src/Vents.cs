@@ -76,7 +76,7 @@ namespace PlayroomsCoop
                     var f = _outVentFeed[start + i];
                     w.Str(f.room); w.I32(f.idx); w.F32(f.at.x); w.F32(f.at.y); w.F32(f.at.z);
                 }
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendHost(SteamNet.SendReliable);
             }
             _outVentFeed.Clear();
         }

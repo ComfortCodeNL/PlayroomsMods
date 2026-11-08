@@ -75,7 +75,7 @@ namespace PlayroomsCoop
                     var w = Protocol.W.Begin(Msg.BallsTaken);
                     w.U16((ushort)n);
                     for (int i = 0; i < n; i++) { w.Str(_outTaken[start + i].room); w.I32(_outTaken[start + i].idx); }
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                 }
                 _outTaken.Clear();
             }
@@ -97,7 +97,7 @@ namespace PlayroomsCoop
                         var m = _outLive[start + i];
                         w.U8((byte)rooms.IndexOf(m.room)); w.I32(m.idx); w.F32(m.pos.x); w.F32(m.pos.y); w.F32(m.pos.z);
                     }
-                    w.SendTo(_peer, SteamNet.SendUnreliable);
+                    w.SendAll(SteamNet.SendUnreliable);
                 }
                 _liveSentCount += _outLive.Count;
                 _outLive.Clear();
@@ -114,7 +114,7 @@ namespace PlayroomsCoop
                         var m = _outMoved[start + i];
                         w.Str(m.room); w.I32(m.idx); w.F32(m.pos.x); w.F32(m.pos.y); w.F32(m.pos.z);
                     }
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                 }
                 _outMoved.Clear();
             }
@@ -124,7 +124,7 @@ namespace PlayroomsCoop
                 {
                     var w = Protocol.W.Begin(Msg.PitAmount);
                     w.Str(kv.Key); w.I32(kv.Value);
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                 }
                 _outPits.Clear();
             }
@@ -153,7 +153,7 @@ namespace PlayroomsCoop
             }
             w.U16((ushort)_pits.Count);
             foreach (var kv in _pits) { w.Str(kv.Key); w.I32(R.Get<int>(kv.Value, "BallAmount")); }
-            w.SendTo(_peer, SteamNet.SendReliable);
+            w.SendAll(SteamNet.SendReliable);
             Plugin.Log.LogInfo($"Sent world snapshot: {_rooms.Count} rooms, {collected} balls collected, {_pits.Count} pits ({w.Len / 1024} KB)");
         }
 

@@ -57,6 +57,12 @@ namespace PlayroomsCoop
         WalletState = 48,
         SaveResend = 49,
         RobotSay = 50,
+        ObjOwner = 51,
+        Roster = 52,
+        LobbyState = 53,
+        ObjFinal = 54,
+        ModCounterTake = 55,
+        ModCounterResult = 56,
     }
 
     internal struct PoseState
@@ -104,7 +110,11 @@ namespace PlayroomsCoop
         }
         public void Bytes(byte[] b, int count) { Need(count); Buffer.BlockCopy(b, 0, Buf, Len, count); Len += count; }
 
+        public void U64(ulong v) { U32((uint)v); U32((uint)(v >> 32)); }
+
         public bool SendTo(ulong peer, int flags) => SteamNet.Send(peer, Buf, Len, flags);
+        public void SendAll(int flags) => Net.SendAll(this, flags);
+        public bool SendHost(int flags) => Net.SendHost(this, flags);
     }
 
     internal ref struct Reader
@@ -119,6 +129,7 @@ namespace PlayroomsCoop
         public uint U32() { Need(4); var v = BinaryPrimitives.ReadUInt32LittleEndian(_b.Slice(_p)); _p += 4; return v; }
         public int I32() { Need(4); var v = BinaryPrimitives.ReadInt32LittleEndian(_b.Slice(_p)); _p += 4; return v; }
         public float F32() { float f = BitConverter.Int32BitsToSingle(I32()); if (float.IsNaN(f) || float.IsInfinity(f) || Math.Abs(f) > 1e7f) throw new InvalidDataException("bad number"); return f; }
+        public ulong U64() { ulong lo = U32(), hi = U32(); return lo | (hi << 32); }
         public string Str()
         {
             int n = U16(); Need(n); var s = Encoding.UTF8.GetString(_b.Slice(_p, n)); _p += n;
@@ -131,7 +142,7 @@ namespace PlayroomsCoop
     internal static class Protocol
     {
         public const uint Magic = 0x31435250;
-        public const byte Version = 30;
+        public const byte Version = 40;
         public const int HeaderSize = 6;
         public const int MaxPacket = 1 << 20;
 
@@ -160,33 +171,25 @@ namespace PlayroomsCoop
             return true;
         }
 
-        public static bool SendHello(ulong to, uint nonce)
+        public static bool SendWelcome(ulong to, bool accepted, uint nonce, int slot)
         {
-            W.Begin(Msg.Hello).U32(nonce);
+            var w = W.Begin(Msg.Welcome); w.U8(accepted ? (byte)1 : (byte)0); w.U32(nonce); w.U8((byte)slot);
             return W.SendTo(to, SteamNet.SendReliable);
         }
 
-        public static uint ReadHello(byte[] buf, int len) => new Reader(buf, len, HeaderSize).U32();
-
-        public static bool SendWelcome(ulong to, bool accepted, uint nonce)
-        {
-            var w = W.Begin(Msg.Welcome); w.U8(accepted ? (byte)1 : (byte)0); w.U32(nonce);
-            return W.SendTo(to, SteamNet.SendReliable);
-        }
-
-        public static bool ReadWelcome(byte[] buf, int len, out uint nonce)
+        public static bool ReadWelcome(byte[] buf, int len, out uint nonce, out int slot)
         {
             var r = new Reader(buf, len, HeaderSize);
-            bool ok = r.U8() == 1; nonce = r.U32();
+            bool ok = r.U8() == 1; nonce = r.U32(); slot = r.Remaining > 0 ? r.U8() : 1;
             return ok;
         }
 
-        public static bool SendState(ulong to, in PoseState s)
+        public static void SendState(in PoseState s)
         {
             var w = W.Begin(Msg.State);
             w.U32(s.Seq); w.F32(s.X); w.F32(s.Y); w.F32(s.Z); w.F32(s.Yaw); w.F32(s.Pitch); w.F32(s.EyeHeight);
             w.U8((byte)((s.InWorld ? 1 : 0) | (s.Sweeping ? 2 : 0)));
-            return w.SendTo(to, SteamNet.SendUnreliable);
+            w.SendAll(SteamNet.SendUnreliable);
         }
 
         public static bool ReadState(byte[] buf, int len, out PoseState s)

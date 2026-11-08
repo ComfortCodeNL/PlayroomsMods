@@ -210,6 +210,18 @@ namespace PlayroomsCoop
             _broomBristles.localScale = new Vector3(0.48f, 0.05f, 0.11f);
         }
 
+        public void SetColor(Color c, float glow)
+        {
+            if (_root == null || (Math.Abs(c.r - Color.r) < 0.001f && Math.Abs(c.g - Color.g) < 0.001f && Math.Abs(c.b - Color.b) < 0.001f)) return;
+            Color = c;
+            var mat = Materials.Get(c, glow);
+            foreach (var t in new[] { _top, _mid, _bottom })
+            {
+                var r = t != null ? t.gameObject.GetComponent<Renderer>() : null;
+                if (r != null) r.sharedMaterial = mat;
+            }
+        }
+
         public void SetVisible(bool v)
         {
             if (_root != null && _root.activeSelf != v) _root.SetActive(v);

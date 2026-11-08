@@ -32,16 +32,19 @@ namespace PlayroomsCoop
                 _buttonStyle = new GUIStyle(GUI.skin.button) { fontSize = 14, richText = true };
             }
 
-            if (_connected && Plugin.ShowNames.Value && _remote != null && _remote.Alive && _cam != null)
+            if (_connected && Plugin.ShowNames.Value && _cam != null)
             {
-                Vector3 sp = _cam.WorldToScreenPoint(_remote.HeadPosition + Vector3.up * 0.45f);
-                if (sp.z > 0f && sp.z < 60f)
+                foreach (var kv in _avatars)
                 {
-                    string hex = ColorHex(_remote.Color);
-                    string tag = $"{_remote.Label} {_peerName}";
+                    var av = kv.Value; var p = Net.Get(kv.Key);
+                    if (p == null || !av.Alive || !av.HasPose) continue;
+                    Vector3 sp = _cam.WorldToScreenPoint(av.HeadPosition + Vector3.up * 0.45f);
+                    if (sp.z <= 0f || sp.z >= 60f) continue;
+                    string hex = ColorHex(av.Color);
+                    string tag = $"{av.Label} {p.Name}";
                     float w = 9f * tag.Length;
                     GUI.Label(new Rect(sp.x - w * 0.5f, Screen.height - sp.y - 14f, w + 40f, 28f),
-                        $"<b><color=#{hex}>{_remote.Label}</color></b> {_peerName}", _nameStyle);
+                        $"<b><color=#{hex}>{av.Label}</color></b> {p.Name}", _nameStyle);
                 }
             }
 
@@ -102,11 +105,11 @@ namespace PlayroomsCoop
             {
                 if (Btn(0, 220f, "Host a game  <b>[H]</b>")) StartHosting();
                 NextRow();
-                Line($"<size=13>Hosting makes you <color=#{ColorHex(P1Color)}>Player 1 (red)</color>; joining makes you <color=#{ColorHex(P2Color)}>Player 2 (blue)</color>.</size>", 22f);
+                Line("<size=13>Up to 4 players. The host is Player 1; others get Players 2 to 4 as they join.</size>", 22f);
             }
             else if (_role == Role.Host)
             {
-                Line("<b>Lobby open.</b> Friends can join from their list, or invite them below.");
+                Line("<b>Lobby open.</b> Up to 3 friends can join from their list, or invite them below.");
                 if (_invitedFriend != 0) Line($"<size=13>Waiting for {SteamNet.NameOf(_invitedFriend)} to answer your invite...</size>", 22f);
                 if (Btn(0, 220f, "Close lobby  <b>[L]</b>")) Leave();
                 NextRow();
@@ -118,7 +121,11 @@ namespace PlayroomsCoop
                 NextRow();
             }
             Gap(10f);
+            DrawFriendList();
+        }
 
+        private void DrawFriendList()
+        {
             Line("<b>Friends playing Playrooms</b>");
             if (_friends.Count == 0)
             {
@@ -140,7 +147,7 @@ namespace PlayroomsCoop
                 GUI.Label(new Rect(PanelX + Pad, _y + 3f, 330f, 26f), $"{f.Name}   <size=13>{state}</size>", _textStyle);
 
                 string action = null;
-                if (mod == 1 || mod == 2) action = null;
+                if (mod == 1 || mod == 2 || Net.Peers.ContainsKey(f.Id)) action = null;
                 else if (_role == Role.None && hosting && open) action = "Join";
                 else if (_role != Role.Client && !(hosting && !open)) action = _invitedFriend == f.Id ? "Invited" : "Invite";
                 if (action != null && GUI.Button(new Rect(PanelX + PanelW - Pad - 120f, _y, 120f, 28f), action, _buttonStyle))
@@ -160,43 +167,56 @@ namespace PlayroomsCoop
 
         private void DrawLobby()
         {
-            string p1 = _role == Role.Host ? SteamNet.MyName : _peerName;
-            string p2 = _role == Role.Host ? _peerName : SteamNet.MyName;
-            bool p1Ready = _role == Role.Host ? _meReady : _peerReady;
-            bool p2Ready = _role == Role.Host ? _peerReady : _meReady;
+            var rows = new List<(ulong id, int slot, string name, bool ready, Color color)>
+            {
+                (Net.Me, Net.MySlot, SteamNet.MyName, _meReady, Net.ColorFor(Net.MySlot, Net.MyColor))
+            };
+            foreach (var p in Net.Peers.Values) rows.Add((p.Id, p.Slot, p.Name, p.Ready, Net.ColorFor(p.Slot, p.Color)));
+            rows.Sort((a, b) => a.slot.CompareTo(b.slot));
+
+            Line(_playing ? $"<b><size=17>Playing</size></b>  <size=13>({rows.Count} of {Net.MaxPlayers})</size>" : $"<b><size=17>Lobby</size></b>  <size=13>({rows.Count} of {Net.MaxPlayers})</size>", 26f);
+            foreach (var row in rows)
+            {
+                bool me = row.id == Net.Me;
+                string tag = _playing ? (me ? "<color=#BBBBBB>you</color>" : "") : ReadyTag(row.ready) + (me ? "  <color=#BBBBBB>(you)</color>" : "");
+                GUI.Label(new Rect(PanelX + Pad, _y + 2f, 400f, 28f),
+                    $"<size=22><color=#{ColorHex(row.color)}>■</color></size>  <b>Player {row.slot + 1}</b>  {row.name}   {tag}", _textStyle);
+                if (_role == Role.Host && !me)
+                {
+                    string key = "kick" + row.id;
+                    if (GUI.Button(new Rect(PanelX + PanelW - Pad - 130f, _y, 130f, 28f), _confirm == key ? "<color=#FF7070>Confirm kick</color>" : "Kick", _buttonStyle) && Confirmed(key)) Kick(row.id);
+                }
+                _y += 32f;
+            }
+            Gap(4f);
+
+            var mine = Net.ColorFor(Net.MySlot, Net.MyColor);
+            GUI.Label(new Rect(PanelX + Pad, _y + 4f, 110f, 28f), "Your colour", _textStyle);
+            if (GUI.Button(new Rect(PanelX + Pad + 115f, _y, 34f, 30f), "<", _buttonStyle)) CycleColor(-1);
+            if (GUI.Button(new Rect(PanelX + Pad + 153f, _y, 46f, 30f), $"<size=26><color=#{ColorHex(mine)}>■</color></size>", _buttonStyle)) CycleColor(1);
+            if (GUI.Button(new Rect(PanelX + Pad + 203f, _y, 34f, 30f), ">", _buttonStyle)) CycleColor(1);
+            GUI.Label(new Rect(PanelX + Pad + 245f, _y + 6f, 300f, 26f), "<size=13>click the square or press <b>[C]</b></size>", _textStyle);
+            _rowH = 34f; NextRow();
 
             if (!_playing)
             {
-                Line("<b><size=17>Lobby</size></b>", 26f);
-                Line($"<color=#{ColorHex(P1Color)}>■</color>  <b>Player 1</b>  {p1}   {ReadyTag(p1Ready)}");
-                Line($"<color=#{ColorHex(P2Color)}>■</color>  <b>Player 2</b>  {p2}   {ReadyTag(p2Ready)}");
-                Gap(4f);
+                Gap(2f);
                 if (HostSave.Enabled)
                 {
-                    Line("<size=13><color=#9FD8FF>You'll both play in the host's world. Player 2's own save is set aside</color></size>", 20f);
+                    Line("<size=13><color=#9FD8FF>Everyone plays in the host's world. Each client's own save is set aside</color></size>", 20f);
                     Line("<size=13><color=#9FD8FF>and put back after the session, untouched.</color></size>", 22f);
                 }
                 else
                 {
-                    Line("<size=13><color=#FFB066>Before you start: back up your saves. Player 2's money is replaced by the host's,</color></size>", 20f);
-                    Line("<size=13><color=#FFB066>and both worlds' progress is merged (balls, pits, upgrades, unlocks).</color></size>", 22f);
+                    Line("<size=13><color=#FFB066>Before you start: back up your saves. Clients' money is replaced by the host's,</color></size>", 20f);
+                    Line("<size=13><color=#FFB066>and all worlds' progress is merged (balls, pits, upgrades, unlocks).</color></size>", 22f);
                 }
-                Gap(4f);
-                if (Btn(0, 200f, _meReady ? "Not ready  <b>[R]</b>" : "<b>Ready</b>  <b>[R]</b>")) ToggleReady();
-            }
-            else
-            {
-                Line($"Playing with <b>{_peerName}</b>");
-                Line($"<size=13><color=#{ColorHex(P1Color)}>■</color> {p1}    <color=#{ColorHex(P2Color)}>■</color> {p2}</size>", 22f);
+                if (_role == Role.Host && rows.Count < Net.MaxPlayers) Line("<size=13>More friends can still join: invite them from the list below.</size>", 22f);
                 Gap(4f);
             }
 
-            float x = _playing ? 0f : 210f;
-            if (_role == Role.Host)
-            {
-                if (Btn(x, 150f, _confirm == "kick" ? "<color=#FF7070>Confirm kick</color>" : "Kick  <b>[K]</b>") && Confirmed("kick")) Kick();
-                x += 160f;
-            }
+            float x = 0f;
+            if (!_playing) { if (Btn(0, 200f, _meReady ? "Not ready  <b>[R]</b>" : "<b>Ready</b>  <b>[R]</b>")) ToggleReady(); x = 210f; }
             if (Btn(x, 150f, _confirm == "leave" ? "<color=#FF7070>Confirm leave</color>" : "Leave  <b>[L]</b>") && Confirmed("leave")) Leave();
             NextRow();
             if (_confirm != null) Line("<size=13>Press again to confirm (Esc to cancel).</size>", 22f);
@@ -206,6 +226,7 @@ namespace PlayroomsCoop
                 Gap(4f);
                 if (Btn(0, 200f, "Host settings  <b>[S]</b>")) _view = View.Settings;
                 NextRow();
+                if (rows.Count < Net.MaxPlayers) { Gap(6f); DrawFriendList(); }
             }
         }
 

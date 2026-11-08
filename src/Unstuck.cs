@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PlayroomsCoop
@@ -6,7 +7,6 @@ namespace PlayroomsCoop
     internal static partial class World
     {
         public static Feature Unstuck;
-        public static bool RemoteInWorld;
 
         private const float UnstuckCooldown = 10f;
         private static float _unstuckReadyAt;
@@ -58,13 +58,13 @@ namespace PlayroomsCoop
             if (body == null) return ResUnavailable;
             Vector3 feet = R.Get<Vector3>(body, "position");
 
-            if (TryPartnerSpot(unstuck, feet, out Vector3 spot))
+            if (TryPlayerSpot(unstuck, feet, out Vector3 spot, out string who))
             {
                 if (!Convert.ToBoolean(R.CallStatic(R.T("TwoPixels.Helper.PlayerTeleport"), "Offset", spot - feet))) return ResUnavailable;
                 try { R.Set(body, "linearVelocity", Vector3.zero); } catch { }
                 _unstuckReadyAt = Time.realtimeSinceStartup + UnstuckCooldown;
-                Plugin.Log.LogInfo($"[Unstuck] moved next to your partner ({Dist(feet, spot):0.0} m)");
-                CoopBehaviour.Notify("Unstuck: moved next to your partner");
+                Plugin.Log.LogInfo($"[Unstuck] moved next to {who} ({Dist(feet, spot):0.0} m)");
+                CoopBehaviour.Notify($"Unstuck: moved next to {who}");
                 return ResFreed;
             }
 
@@ -72,22 +72,36 @@ namespace PlayroomsCoop
             {
                 R.Call(c, "ResetToStartPosition");
                 _unstuckReadyAt = Time.realtimeSinceStartup + UnstuckCooldown;
-                Plugin.Log.LogInfo("[Unstuck] no partner to go to: back to the clean room");
+                Plugin.Log.LogInfo("[Unstuck] no other player to go to: back to the clean room");
                 CoopBehaviour.Notify("Unstuck: back to the clean room");
                 return ResFreed;
             }
             return ResUnavailable;
         }
 
-        private static bool TryPartnerSpot(object unstuck, Vector3 myFeet, out Vector3 spot)
+        private static bool TryPlayerSpot(object unstuck, Vector3 myFeet, out Vector3 spot, out string who)
+        {
+            spot = default; who = null;
+            if (!_connected) return false;
+            var others = new List<Net.Peer>();
+            foreach (var p in Net.Peers.Values) if (p.InWorld && !p.Dead && p.Head.HasValue) others.Add(p);
+            others.Sort((a, b) => Dist(a.Head.Value, myFeet).CompareTo(Dist(b.Head.Value, myFeet)));
+            foreach (var p in others)
+            {
+                if (!TrySpotBeside(unstuck, p.Head.Value, out spot)) continue;
+                who = p.Name;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TrySpotBeside(object unstuck, Vector3 head, out Vector3 spot)
         {
             spot = default;
-            if (!_connected || !RemoteInWorld || _partnerDead || !RemoteHead.HasValue) return false;
 
             float eye = 1.6f;
             var me = PlayerBody();
             if (me != null && LocalHead.HasValue) eye = Mathf.Clamp(LocalHead.Value.y - me.position.y, 1.0f, 2.2f);
-            Vector3 head = RemoteHead.Value;
             if (!Ground(head + Vector3.up * 0.1f, 3.5f, out Vector3 partnerGround)) return false;
             float footLift = me != null && Ground(me.position + Vector3.up * 0.5f, 2f, out Vector3 myGround) ? Mathf.Clamp(me.position.y - myGround.y, 0f, 1f) : 0f;
             Vector3 partnerFeet = partnerGround + Vector3.up * footLift;

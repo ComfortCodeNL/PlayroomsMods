@@ -10,8 +10,7 @@ namespace PlayroomsCoop
         private static readonly Dictionary<string, string> _coupledDoor = new Dictionary<string, string>();
         private static readonly List<object> _keptPairs = new List<object>();
 
-        // The game keeps one portal pair open at a time and closes the previous pair when another opens.
-        // With two players that closes the door the other one is using, so keep a pair open while someone is at it.
+        // the game keeps one portal pair open and closes the last one, which shuts doors other players are using
         private static void PortalHooks()
         {
             R.Patch(R.T(PortalT), "ClaimOpenPair", 0, typeof(Hooks), nameof(Hooks.ClaimOpenPairPrefix), null);
@@ -33,7 +32,6 @@ namespace PlayroomsCoop
             }, "portal pair");
         }
 
-        // close kept pairs the way the game would have, once nobody is at them any more
         private static void KeptPairsTick()
         {
             if (_keptPairs.Count == 0) return;
@@ -54,7 +52,9 @@ namespace PlayroomsCoop
         private static bool InUse(object portal)
         {
             if (portal == null || !Alive(portal)) return false;
-            return Near(portal, LocalHead) || Near(portal, RemoteHead);
+            if (Near(portal, LocalHead)) return true;
+            foreach (var p in Net.Peers.Values) if (p.InWorld && Near(portal, p.Head)) return true;
+            return false;
         }
 
         private static bool Near(object portal, Vector3? head)
@@ -70,7 +70,6 @@ namespace PlayroomsCoop
             catch { return false; }
         }
 
-        // door key -> the door on the other end of its portal, which the game opens and closes along with it
         private static void ScanPortals()
         {
             _coupledDoor.Clear();

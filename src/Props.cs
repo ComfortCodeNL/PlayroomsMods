@@ -17,23 +17,22 @@ namespace PlayroomsCoop
 
         public static Feature Feature;
         private static bool _connected, _isHost, _snapshotSent;
-        private static ulong _peer;
         private static readonly Dictionary<string, Prop> _props = new Dictionary<string, Prop>();
-        private static float _lastScan = -99f, _nextTick, _clockOffset; private static bool _hasOffset;
+        private static float _lastScan = -99f, _nextTick;
         private const float Delay = 0.1f;
 
         public static void Init() => Feature = new Feature("Props", Plugin.SyncProps.Value);
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
-            _connected = true; _peer = peer; _isHost = isHost; _snapshotSent = false; _hasOffset = false;
+            _connected = true; _isHost = isHost; _snapshotSent = false;
             _props.Clear(); _lastScan = -99f;
         }
 
         public static void OnDisconnected()
         {
             foreach (var p in _props.Values) if (p.Puppet) EndPuppet(p);
-            _connected = false; _peer = 0; _props.Clear();
+            _connected = false; _props.Clear();
         }
 
         private static string PathOf(Transform t)
@@ -156,7 +155,7 @@ namespace PlayroomsCoop
                 if (now < _nextTick) return;
                 _nextTick = now + 0.05f;
 
-                var me = World.LocalHead; var them = World.RemoteHead;
+                var me = World.LocalHead;
                 var live = new List<Prop>(); var rested = new List<Prop>();
                 foreach (var p in _props.Values)
                 {
@@ -169,7 +168,7 @@ namespace PlayroomsCoop
                     {
                         if (now - p.PuppetEnded < 2f || me == null) continue;
                         float dMe = Dist(pos, me.Value);
-                        if (dMe > 8f || (them != null && Dist(pos, them.Value) < dMe)) continue;
+                        if (dMe > 8f || Net.OtherCloser(pos, dMe)) continue;
                         p.Moving = true; p.StillSince = 0f;
                     }
                     if (!p.Moving) continue;
@@ -212,7 +211,7 @@ namespace PlayroomsCoop
                 var w = Protocol.W.Begin(Msg.PropsLive);
                 w.F32(now); w.U16((ushort)n);
                 for (int i = 0; i < n; i++) WritePose(w, list[s + i]);
-                w.SendTo(_peer, SteamNet.SendUnreliable);
+                w.SendAll(SteamNet.SendUnreliable);
             }
         }
 
@@ -224,7 +223,7 @@ namespace PlayroomsCoop
                 var w = Protocol.W.Begin(Msg.PropsRest);
                 w.U16((ushort)n);
                 for (int i = 0; i < n; i++) WritePose(w, list[s + i]);
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
             }
             if (why != null) Plugin.Log.LogInfo($"[Props] sent {why} of {list.Count} loose objects");
         }
@@ -238,9 +237,7 @@ namespace PlayroomsCoop
             if (type == Msg.PropsLive)
             {
                 sentAt = r.F32();
-                float off = now - sentAt;
-                if (!_hasOffset || off < _clockOffset) { _clockOffset = off; _hasOffset = true; }
-                else _clockOffset += (off - _clockOffset) * 0.01f;
+                sentAt += Net.Offset(Net.Sender, sentAt);
             }
             int n = r.U16();
             var items = new List<(string key, Vector3 pos, Quaternion rot)>();
@@ -285,7 +282,7 @@ namespace PlayroomsCoop
 
         private static void TickPuppets(float now)
         {
-            float renderT = now - _clockOffset - Delay;
+            float renderT = now - Delay;
             foreach (var p in _props.Values)
             {
                 if (!p.Puppet || p.Samples.Count == 0) continue;

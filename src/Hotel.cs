@@ -3,8 +3,6 @@ using System.Collections.Generic;
 
 namespace PlayroomsCoop
 {
-    // Hotel cleaning schedule. Checkmarks are kept per room interior (by its room key), so they're
-    // mirrored by key over the door messages with an "H|" prefix.
     internal static partial class World
     {
         private const string HotelT = "TwoPixels.Hotel.HotelRooms";
@@ -41,7 +39,7 @@ namespace PlayroomsCoop
                 if (!known || done == last) continue;
                 if (_doorIgnoreUntil.TryGetValue(kv.Key, out float until) && now < until) continue;
                 var w = Protocol.W.Begin(Msg.DoorState); w.Str(kv.Key); w.U8(done ? (byte)1 : (byte)0);
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
             }
         }
 

@@ -14,44 +14,85 @@ namespace PlayroomsCoop
         private static readonly string[] ScareCounts = { "minScaresPerDay", "maxScaresPerDay" };
         private static readonly string[] ScareWaits = { "restPhase", "retryPause", "dayMinutesPerScare", "cooldownAfterScare" };
 
+        private static float _tunedMult = 1f;
+
+        private static int _scarePlayers = 1;
+
+        private static float ScareMultiplier()
+        {
+            _scarePlayers = 1;
+            bool cozy = false;
+            try { cozy = Convert.ToBoolean(R.GetStatic(R.T("TwoPixels.BackroomCleaner.GameMode"), "IsCozy")); } catch { }
+            if (cozy) return 1f;
+            int players = 1;
+            foreach (var p in Net.Peers.Values) if (p.InWorld) players++;
+            _scarePlayers = players;
+            float step = Mathf.Clamp(Plugin.AmbientScareMultiplier.Value, 1f, 2f) - 1f;
+            return Mathf.Clamp(1f + step * (players - 1), 1f, 4f);
+        }
+
+        private static readonly Dictionary<string, double> _directorWritten = new Dictionary<string, double>();
+
+        // other mods may write these too: a value we didn't write becomes the new base
         private static void TuneDirector(float now)
         {
             if (now < _nextDirectorCheck) return;
             _nextDirectorCheck = now + 5f;
-            float mult = Mathf.Clamp(Plugin.AmbientScareMultiplier.Value, 1f, 3f);
+            float mult = ScareMultiplier();
             if (!Alive(_director))
             {
                 _director = null;
                 foreach (var d in R.FindAll(R.T("TwoPixels.EasterEgg.HorrorDirector"))) { _director = d; break; }
             }
-            if (_director == null || R.Ptr(_director) == _tunedDirector) return;
-            _tunedDirector = R.Ptr(_director);
-            _directorBase.Clear();
-            var parts = new List<string>();
+            if (_director == null) return;
+            bool fresh = R.Ptr(_director) != _tunedDirector;
+            if (fresh) { _directorBase.Clear(); _directorWritten.Clear(); _tunedMult = 1f; }
+            bool changed = fresh || Math.Abs(mult - _tunedMult) > 0.01f;
             foreach (var n in ScareCounts)
             {
                 if (!R.Has(_director, n)) continue;
-                int v = R.Get<int>(_director, n); _directorBase[n] = v;
-                int nv = (int)Math.Round(v * mult); R.Set(_director, n, nv);
-                parts.Add($"{n} {v} -> {nv}");
+                double cur = R.Get<int>(_director, n);
+                if (!_directorWritten.TryGetValue(n, out double w) || Math.Abs(cur - w) > 0.001) { _directorBase[n] = cur / _tunedMult; changed = true; }
             }
             foreach (var n in ScareWaits)
             {
                 if (!R.Has(_director, n)) continue;
-                float v = R.Get<float>(_director, n); _directorBase[n] = v;
-                R.Set(_director, n, v / mult);
-                parts.Add($"{n} {v:0.#} -> {v / mult:0.#}");
+                double cur = R.Get<float>(_director, n);
+                if (!_directorWritten.TryGetValue(n, out double w) || Math.Abs(cur - w) > 0.001) { _directorBase[n] = cur * _tunedMult; changed = true; }
             }
-            Plugin.Log.LogInfo($"[Scares] co-op ambient scares x{mult:F1}: " + string.Join(", ", parts));
+            if (!changed) return;
+            _tunedDirector = R.Ptr(_director);
+            _tunedMult = mult;
+            var parts = new List<string>();
+            foreach (var n in ScareCounts)
+            {
+                if (!_directorBase.TryGetValue(n, out var b0)) continue;
+                double bv = Convert.ToDouble(b0);
+                int nv = (int)Math.Round(bv * mult); R.Set(_director, n, nv); _directorWritten[n] = nv;
+                parts.Add($"{n} {bv:0.#} -> {nv}");
+            }
+            foreach (var n in ScareWaits)
+            {
+                if (!_directorBase.TryGetValue(n, out var b0)) continue;
+                double bv = Convert.ToDouble(b0);
+                float nv = (float)(bv / mult); R.Set(_director, n, nv); _directorWritten[n] = nv;
+                parts.Add($"{n} {bv:0.#} -> {nv:0.#}");
+            }
+            Plugin.Log.LogInfo($"[Scares] daytime scares x{mult:F1} ({_scarePlayers} in the world): " + string.Join(", ", parts));
         }
 
         private static void RestoreDirector()
         {
             if (_tunedDirector == IntPtr.Zero) return;
             if (Alive(_director) && R.Ptr(_director) == _tunedDirector)
-                foreach (var kv in _directorBase) R.Set(_director, kv.Key, kv.Value);
-            _tunedDirector = IntPtr.Zero;
-            _directorBase.Clear();
+                foreach (var kv in _directorBase)
+                {
+                    double bv = Convert.ToDouble(kv.Value);
+                    if (Array.IndexOf(ScareCounts, kv.Key) >= 0) R.Set(_director, kv.Key, (int)Math.Round(bv));
+                    else R.Set(_director, kv.Key, (float)bv);
+                }
+            _tunedDirector = IntPtr.Zero; _tunedMult = 1f;
+            _directorBase.Clear(); _directorWritten.Clear();
         }
 
         private static void ClientCaught()
@@ -107,7 +148,7 @@ namespace PlayroomsCoop
                 if (!known || open == last) continue;
                 if (_doorIgnoreUntil.TryGetValue(kv.Key, out float until) && now < until) continue;
                 var w = Protocol.W.Begin(Msg.DoorState); w.Str(kv.Key); w.U8(open ? (byte)1 : (byte)0);
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
             }
         }
 
@@ -178,7 +219,7 @@ namespace PlayroomsCoop
             _dayLastPhase = phase; _dayLastDay = day;
             if (now < _dayIgnoreUntil) return;
             var w = Protocol.W.Begin(Msg.DayState); w.I32(phase); w.I32(day);
-            w.SendTo(_peer, SteamNet.SendReliable);
+            w.SendAll(SteamNet.SendReliable);
             Plugin.Log.LogInfo($"Day cycle moved on here: day {day}, phase {phase}");
         }
 
@@ -234,8 +275,11 @@ namespace PlayroomsCoop
             return open || closing;
         }
 
+        private static ulong _pendFrom;
+
         private static void ApplyDay(int phase, int day)
         {
+            _pendFrom = Net.Sender;
             _pendPhase = phase; _pendDay = day; _pendSince = Time.realtimeSinceStartup;
             _pendCloseAt = -1f; _pendClosedEndsNight = false;
             _dayIgnoreUntil = _pendSince + 8f;
@@ -273,7 +317,7 @@ namespace PlayroomsCoop
                     {
                         try { R.Call(term, "Close"); } catch (Exception e) { Plugin.Log.LogWarning("[Day] closing the computer failed: " + e.Message); }
                     }
-                    if (endsNight) CoopBehaviour.Notify("Your partner clicked Lights out: closing your computer");
+                    if (endsNight) CoopBehaviour.Notify($"{Net.NameOf(_pendFrom)} clicked Lights out: closing your computer");
                     return;
                 }
                 if (now - _pendCloseAt < 4f) return;
@@ -292,7 +336,7 @@ namespace PlayroomsCoop
                     if (bed != null) { try { R.Call(bed, "OnTerminalClosed", true); done = true; } catch { } }
                     if (!done) R.Call(dts, "WakeUp");
                 }
-                Plugin.Log.LogInfo($"Partner clicked Lights out: starting day {_pendDay} here too");
+                Plugin.Log.LogInfo($"{Net.NameOf(_pendFrom)} clicked Lights out: starting day {_pendDay} here too");
                 _bedCheckAt = now + 6f;
             }
             else
@@ -301,7 +345,7 @@ namespace PlayroomsCoop
                 float dur = R.Get<float>(dts, "CurrentPhaseDuration");
                 R.Set(dts, "_timer", dur + 0.5f);
                 if (R.Get<float>(dts, "RemainingTime") > rem0 + 0.01f) R.Set(dts, "_timer", 0f);
-                Plugin.Log.LogInfo("Partner's shift ended: ending the shift here too");
+                Plugin.Log.LogInfo($"{Net.NameOf(_pendFrom)}'s shift ended: ending the shift here too");
             }
             _pendDay = -1;
         }
@@ -351,7 +395,7 @@ namespace PlayroomsCoop
                 if (dts == null || !DayRunning(dts)) return;
                 var w = Protocol.W.Begin(Msg.DayTime);
                 w.I32(Convert.ToInt32(R.Get(dts, "_phase"))); w.F32(R.Get<float>(dts, "_timer"));
-                w.SendTo(_peer, SteamNet.SendUnreliable);
+                w.SendAll(SteamNet.SendUnreliable);
             }, "host clock");
         }
 

@@ -7,7 +7,7 @@ namespace PlayroomsCoop
     internal static partial class World
     {
         private static object _enemyService;
-        private static bool _standDownSet, _seeHost, _seeP2, _lastNetActive;
+        private static bool _standDownSet, _lastNetActive;
         private static float _nextLosCheck, _nextEnemyBuild;
 
         private static object EnemyService()
@@ -82,7 +82,7 @@ namespace PlayroomsCoop
                         w.U8(1); w.F32(p.x); w.F32(p.y); w.F32(p.z); w.F32(t.eulerAngles.y); w.F32(speed);
                         w.U8((byte)Convert.ToInt32(R.Get(enemy, "_state")));
                     }
-                    w.SendTo(_peer, SteamNet.SendUnreliable);
+                    w.SendAll(SteamNet.SendUnreliable);
                 }
 
                 if (!isOut) return;
@@ -90,50 +90,72 @@ namespace PlayroomsCoop
             }, "host entity");
         }
 
+        private static ulong _targetPeer;
+        private static readonly Dictionary<ulong, float> _catchCool = new Dictionary<ulong, float>();
+        private static readonly Dictionary<ulong, bool> _sees = new Dictionary<ulong, bool>();
+
         private static void UpdateTarget(object enemy, float now)
         {
             var current = R.Get(enemy, "_player");
             if (current != null && (_proxy == null || !R.Same(current, _proxy.transform)))
                 _hostPlayerTransform = current;
-            if (_hostPlayerTransform == null || RemoteHead == null || LocalHead == null) return;
-
+            if (_hostPlayerTransform == null || LocalHead == null) return;
             if (_proxy == null)
             {
-                _proxy = new GameObject("PlayroomsCoop_Player2Target");
+                _proxy = new GameObject("PlayroomsCoop_PlayerTarget");
                 UnityEngine.Object.DontDestroyOnLoad(_proxy);
             }
             var hostT = (Transform)_hostPlayerTransform;
             float offset = LocalHead.Value.y - hostT.position.y;
-            var head = RemoteHead.Value;
-            _proxy.transform.position = new Vector3(head.x, head.y - offset, head.z);
+
+            var cand = new List<(ulong id, Vector3 pos)> { (0UL, hostT.position) };
+            foreach (var p in Net.Peers.Values)
+            {
+                if (!p.InWorld || p.Dead || !p.Head.HasValue) continue;
+                if (_catchCool.TryGetValue(p.Id, out float until) && now < until) continue;
+                cand.Add((p.Id, new Vector3(p.Head.Value.x, p.Head.Value.y - offset, p.Head.Value.z)));
+            }
+            if (_targetPeer != 0 && !cand.Exists(c => c.id == _targetPeer)) _targetPeer = 0;
 
             var e = ((Component)enemy).transform.position;
-            float dHost = Dist(e, hostT.position), dP2 = Dist(e, _proxy.transform.position);
-            bool cooldown = now < _caughtCooldownUntil;
-
             var perception = R.Get(enemy, "perception");
             if (perception != null && now >= _nextLosCheck)
             {
                 _nextLosCheck = now + 0.25f;
-                _seeHost = Sees(perception, _hostPlayerTransform);
-                _seeP2 = Sees(perception, _proxy.transform);
+                _sees.Clear();
+                foreach (var c in cand)
+                {
+                    if (c.id == 0) { _sees[0] = Sees(perception, _hostPlayerTransform); continue; }
+                    _proxy.transform.position = c.pos;
+                    _sees[c.id] = Sees(perception, _proxy.transform);
+                }
             }
 
             float sense = Math.Max(0f, Plugin.EntitySenseRadius.Value);
-            bool nearHost = dHost <= sense, nearP2 = dP2 <= sense;
-
-            bool wantP2;
-            if (cooldown) wantP2 = false;
-            else if (nearHost || nearP2)
-                wantP2 = nearP2 && (!nearHost || dP2 < dHost);
-            else if (_seeP2 && !_seeHost) wantP2 = true;
-            else if (_seeHost && !_seeP2) wantP2 = false;
-            else if (_seeHost && _seeP2)
-                wantP2 = _targetingProxy ? dP2 < dHost + 0.5f : dP2 + 0.5f < dHost;
-            else wantP2 = _targetingProxy ? dP2 < dHost + 2f : dP2 + 2f < dHost;
-
-            if (wantP2 && !_targetingProxy) { SetEnemyTarget(enemy, _proxy.transform, true); Protocol.SendSimple(_peer, Msg.EnemyNotice, SteamNet.SendReliable); Plugin.Log.LogInfo($"[Entity] now hunting Player 2 (sees P2: {_seeP2}, sees host: {_seeHost}, P2 {dP2:F1} m, host {dHost:F1} m)"); }
-            else if (!wantP2 && _targetingProxy) { SetEnemyTarget(enemy, _hostPlayerTransform, false); Plugin.Log.LogInfo($"[Entity] now hunting the host (sees P2: {_seeP2}, sees host: {_seeHost}, P2 {dP2:F1} m, host {dHost:F1} m)"); }
+            ulong pick = _targetPeer; float pickD = float.MaxValue, curD = float.MaxValue;
+            bool anyNear = false, anySeen = false;
+            foreach (var c in cand) { float d = Dist(e, c.pos); if (d <= sense) anyNear = true; if (_sees.TryGetValue(c.id, out bool v) && v) anySeen = true; if (c.id == _targetPeer) curD = d; }
+            foreach (var c in cand)
+            {
+                float d = Dist(e, c.pos);
+                bool seen = _sees.TryGetValue(c.id, out bool v) && v;
+                if (anyNear ? d > sense : anySeen && !seen) continue;
+                float margin = anyNear ? 0f : anySeen ? 0.5f : 2f;
+                float score = c.id == _targetPeer ? d - margin : d;
+                if (score < pickD) { pickD = score; pick = c.id; }
+            }
+            if (pick != _targetPeer)
+            {
+                _targetPeer = pick;
+                if (pick == 0) SetEnemyTarget(enemy, _hostPlayerTransform, false);
+                else
+                {
+                    SetEnemyTarget(enemy, _proxy.transform, true);
+                    Net.SendTo(pick, Protocol.W.Begin(Msg.EnemyNotice), SteamNet.SendReliable);
+                }
+                Plugin.Log.LogInfo($"[Entity] now hunting {(pick == 0 ? "the host" : Net.NameOf(pick))} ({cand.Count} players, near: {anyNear}, seen: {anySeen})");
+            }
+            if (_targetPeer != 0) foreach (var c in cand) if (c.id == _targetPeer) _proxy.transform.position = c.pos;
         }
 
         private static float HDist(Vector3 a, Vector3 b) { float dx = a.x - b.x, dz = a.z - b.z; return Mathf.Sqrt(dx * dx + dz * dz); }

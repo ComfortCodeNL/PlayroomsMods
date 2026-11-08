@@ -186,9 +186,19 @@ namespace PlayroomsCoop
             _strayScan.Clear(); _strayFound.Clear(); _gather.Clear();
             _strayCursor = 0; _strayChecked = 0; _strayNoMesh = 0; _gatherRoom = 0; _gatherSpot = 0;
             var ids = new List<string>(_rooms.Keys); ids.Sort(StringComparer.Ordinal);
-            int players = _connected ? 2 : 1, me = _connected && !_isHost ? 1 : 0;
+            var players = _connected ? Net.WorkSplit() : new List<ulong> { Net.Me };
             for (int i = 0; i < ids.Count; i++)
-                if (i % players == me && Alive(_rooms[ids[i]])) _gather.Add((ids[i], _rooms[ids[i]]));
+            {
+                var room = _rooms[ids[i]];
+                if (!Alive(room)) continue;
+                ulong who = players[i % players.Count];
+                if (players.Count > 1)
+                {
+                    var at = ((Component)room).transform.position; float best = float.MaxValue;
+                    foreach (var id in players) { var h = Net.HeadOf(id); if (h.HasValue && Dist(h.Value, at) < best) { best = Dist(h.Value, at); who = id; } }
+                }
+                if (who == Net.Me) _gather.Add((ids[i], room));
+            }
             _strayFilling = true;
         }
 

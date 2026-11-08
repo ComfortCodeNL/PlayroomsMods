@@ -7,39 +7,59 @@ namespace PlayroomsCoop
 {
     public partial class CoopBehaviour
     {
-        private Color MyColor => _role == Role.Host ? P1Color : P2Color;
-        private Color PeerColor => _role == Role.Host ? P2Color : P1Color;
-        private static Color P1Color => Plugin.ParseColor(Plugin.Player1Color.Value, new Color(0.84f, 0.23f, 0.23f));
-        private static Color P2Color => Plugin.ParseColor(Plugin.Player2Color.Value, new Color(0.23f, 0.42f, 0.91f));
-        private string MyLabel => _role == Role.Host ? "P1" : "P2";
-        private string PeerLabel => _role == Role.Host ? "P2" : "P1";
+        private static float GlowValue => Mathf.Clamp(Plugin.Glow.Value, 0f, 3f);
+        private static Color MyColor => Net.ColorFor(Net.MySlot, Net.MyColor);
+        [HideFromIl2Cpp]
+        private static Color PeerColor(Net.Peer p) => Net.ColorFor(p.Slot, p.Color);
 
         private void EnsureAvatars()
         {
-            float glow = Mathf.Clamp(Plugin.Glow.Value, 0f, 3f);
-            if (_local == null || !_local.Alive) _local = new Avatar(MyLabel, MyColor, true, glow);
-            if (_remote == null || !_remote.Alive)
+            if (_local == null || !_local.Alive) _local = new Avatar(Net.Label(Net.MySlot), MyColor, true, GlowValue);
+        }
+
+        [HideFromIl2Cpp]
+        private Avatar AvatarFor(Net.Peer p)
+        {
+            if (_avatars.TryGetValue(p.Id, out var av) && av.Alive) return av;
+            av = new Avatar(Net.Label(p.Slot), PeerColor(p), false, GlowValue);
+            av.SetVisible(false);
+            _avatars[p.Id] = av;
+            return av;
+        }
+
+        private void RefreshAvatarColors()
+        {
+            if (_local != null && _local.Alive) { _local.SetColor(MyColor, GlowValue); _local.Label = Net.Label(Net.MySlot); }
+            foreach (var kv in _avatars)
             {
-                _remote = new Avatar(PeerLabel, PeerColor, false, glow);
-                _remote.SetVisible(false);
+                var p = Net.Get(kv.Key);
+                if (p == null || !kv.Value.Alive) continue;
+                kv.Value.SetColor(PeerColor(p), GlowValue); kv.Value.Label = Net.Label(p.Slot);
             }
         }
 
         private void DestroyAvatars()
         {
             _local?.Destroy(); _local = null;
-            _remote?.Destroy(); _remote = null;
+            foreach (var av in _avatars.Values) av.Destroy();
+            _avatars.Clear();
         }
 
         [HideFromIl2Cpp]
         private void UpdatePoses(float now, float dt)
         {
             EnsureAvatars();
-            _remote.Tick(dt);
-            World.RemoteHead = _remote.HasPose ? _remote.HeadPosition : (Vector3?)null;
-
             bool inWorld = World.InGameWorld();
-            if (!inWorld || !_remoteInWorld) _remote.SetVisible(false);
+            foreach (var kv in _avatars)
+            {
+                var p = Net.Get(kv.Key);
+                var av = kv.Value;
+                if (p == null || !av.Alive) continue;
+                av.Tick(dt);
+                p.Head = av.HasPose ? av.HeadPosition : (Vector3?)null;
+                if (!inWorld || !p.InWorld) av.SetVisible(false);
+            }
+
             if (!inWorld)
             {
                 _local.SetVisible(false);
@@ -47,7 +67,7 @@ namespace PlayroomsCoop
                 {
                     _nextSend = now + 0.5f;
                     var hidden = _lastPose; hidden.InWorld = false; if (hidden.Seq == 0) hidden.Seq = ++_seq;
-                    Protocol.SendState(_peer, hidden);
+                    Protocol.SendState(hidden);
                 }
                 return;
             }
@@ -56,7 +76,7 @@ namespace PlayroomsCoop
             var cam = FindPlayerCamera(now);
             if (cam == null)
             {
-                if (now >= _nextSend) { _nextSend = now + 0.5f; Protocol.SendState(_peer, _lastPose); }
+                if (now >= _nextSend) { _nextSend = now + 0.5f; Protocol.SendState(_lastPose); }
                 return;
             }
 
@@ -102,7 +122,7 @@ namespace PlayroomsCoop
             {
                 _nextSend = now + 1f / rate;
                 _lastPose = new PoseState { Seq = ++_seq, X = pos.x, Y = pos.y, Z = pos.z, Yaw = yaw, Pitch = pitch, EyeHeight = _eyeH, InWorld = true, Sweeping = World.LocalSweeping(now) };
-                Protocol.SendState(_peer, _lastPose);
+                Protocol.SendState(_lastPose);
             }
         }
 

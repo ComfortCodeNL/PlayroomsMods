@@ -21,9 +21,11 @@ namespace PlayroomsCoop
         {
             if (_role != Role.None) return;
             _role = Role.Host;
+            Net.Reset();
+            Net.IsHost = true; Net.HostId = Net.Me; Net.MySlot = 0; Net.MyColor = SavedColor();
             _lastBeacon = 0;
             _lastFriendRefresh = 0;
-            SetStatus("Lobby open. Friends can join from their list, or invite them.");
+            SetStatus("Lobby open. Up to 3 friends can join from their list, or invite them.");
             Plugin.Log.LogInfo("Hosting");
         }
 
@@ -32,6 +34,8 @@ namespace PlayroomsCoop
         {
             if (_role != Role.None) return;
             _role = Role.Client;
+            Net.Reset();
+            Net.MyColor = SavedColor();
             _joinTarget = host;
             _joinNonce = (uint)new System.Random().Next(1, int.MaxValue);
             _joinStarted = Now;
@@ -45,7 +49,7 @@ namespace PlayroomsCoop
         {
             if (_role == Role.Client) return;
             if (_role == Role.None) StartHosting();
-            if (_connected) { SetStatus("Your lobby is full."); return; }
+            if (Net.Peers.Count >= Net.MaxPlayers - 1) { SetStatus("Your lobby is full (4 players)."); return; }
             _invitedFriend = friend;
             _invitedAt = Now; _lastInviteSend = Now;
             Protocol.SendSimple(friend, Msg.Invite, SteamNet.SendReliable);
@@ -74,30 +78,49 @@ namespace PlayroomsCoop
         {
             if (!_connected || _playing) return;
             _meReady = !_meReady;
-            var w = Protocol.W.Begin(Msg.Ready); w.U8(_meReady ? (byte)1 : (byte)0);
-            w.SendTo(_peer, SteamNet.SendReliable);
-            TryStartPlaying();
+            if (_role == Role.Host) { SendRoster(); TryStartPlaying(); }
+            else SendLobbyState();
+        }
+
+        private void SendLobbyState()
+        {
+            if (_role != Role.Client || !_connected) return;
+            var w = Protocol.W.Begin(Msg.LobbyState); w.U8(_meReady ? (byte)1 : (byte)0); w.U8(ColorByte(Net.MyColor));
+            w.SendTo(Net.HostId, SteamNet.SendReliable);
+        }
+
+        private static int SavedColor()
+        {
+            int c = Plugin.MyColor.Value;
+            return c >= 0 && c < Net.Palette.Length ? c : -1;
+        }
+
+        private void CycleColor(int dir)
+        {
+            int n = Net.Palette.Length;
+            int cur = Net.MyColor >= 0 ? Net.MyColor : Net.DefaultIndex(Net.MySlot);
+            Net.MyColor = ((cur + dir) % n + n) % n;
+            Plugin.MyColor.Value = Net.MyColor;
+            if (_role == Role.Host) SendRoster(); else SendLobbyState();
+            RefreshAvatarColors();
         }
 
         private void TryStartPlaying()
         {
-            if (_playing || !_connected || !_meReady || !_peerReady) return;
+            if (_role != Role.Host || _playing || !_connected || !_meReady) return;
+            foreach (var p in Net.Peers.Values) if (!p.Ready) return;
             _playing = true;
-            Plugin.Log.LogInfo("Both players ready");
-            if (HostSave.Enabled && _role == Role.Client)
-            {
-                SetStatus("Both ready. Waiting for the host's world...");
-                return;
-            }
+            Plugin.Log.LogInfo($"Everyone ready ({Net.Count} players)");
+            SendRoster();
             StartWorld();
-            SetStatus($"Both ready. Playing with {_peerName}!");
+            SetStatus($"Everyone's ready. Playing with {Net.Peers.Count} other player{(Net.Peers.Count == 1 ? "" : "s")}!");
         }
 
         private void StartWorld()
         {
             if (_worldStarted) return;
             _worldStarted = true;
-            World.OnConnected(_peer, _role == Role.Host);
+            World.OnConnected(_role == Role.Host);
             Plugin.Log.LogInfo("World sharing started");
         }
 
@@ -109,17 +132,19 @@ namespace PlayroomsCoop
             return false;
         }
 
-        private void Kick()
+        [HideFromIl2Cpp]
+        private void Kick(ulong id)
         {
-            if (_role != Role.Host || !_connected) return;
-            Protocol.SendSimple(_peer, Msg.Kick, SteamNet.SendReliable);
-            SetStatus($"Removed {_peerName} from the game.");
-            DropPeer();
+            var p = Net.Get(id);
+            if (_role != Role.Host || p == null) return;
+            Protocol.SendSimple(id, Msg.Kick, SteamNet.SendReliable);
+            SetStatus($"Removed {p.Name} from the game.");
+            RemovePeer(id, true);
         }
 
         private void Leave()
         {
-            if (_peer != 0) Protocol.SendSimple(_peer, Msg.Bye, SteamNet.SendReliable);
+            foreach (var id in Net.Peers.Keys) Protocol.SendSimple(id, Msg.Bye, SteamNet.SendReliable);
             SetStatus(_role == Role.Host ? "Lobby closed." : "Left the game.");
             ResetSession();
         }
@@ -156,7 +181,8 @@ namespace PlayroomsCoop
         {
             if (i < 0 || i >= _friends.Count) return;
             var f = _friends[i];
-            if (_connected) return;
+            if (_role == Role.Client) return;
+            if (Net.Peers.ContainsKey(f.Id)) return;
             var (hosting, open) = FriendState(f.Id);
             if (ModState(f.Id) == 2 || ModState(f.Id) == 1) { SetStatus(ModState(f.Id) == 1 ? $"{f.Name} has a different version of the mod." : $"{f.Name} doesn't have the co-op mod."); return; }
             if (_role == Role.None && hosting && open) Join(f.Id);
@@ -183,7 +209,7 @@ namespace PlayroomsCoop
             }
 
             if (!_playing && KeyInput.Pressed(KeyR)) ToggleReady();
-            if (_role == Role.Host && KeyInput.Pressed(KeyK) && Confirmed("kick")) Kick();
+            if (KeyInput.Pressed(KeyC)) CycleColor(1);
             if (KeyInput.Pressed(KeyInput.L) && Confirmed("leave")) Leave();
             if (_role == Role.Host && KeyInput.Pressed(KeyS)) _view = View.Settings;
         }

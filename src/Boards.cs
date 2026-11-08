@@ -12,7 +12,6 @@ namespace PlayroomsCoop
 
         public static Feature Feature;
         private static bool _connected, _isHost, _snapshotSent;
-        private static ulong _peer;
         private static readonly Dictionary<string, object> _boards = new Dictionary<string, object>();
         private static readonly Dictionary<string, bool> _wasOpen = new Dictionary<string, bool>();
         private static readonly Dictionary<string, int> _lastHash = new Dictionary<string, int>();
@@ -21,13 +20,13 @@ namespace PlayroomsCoop
 
         public static void Init() => Feature = new Feature("Whiteboards", Plugin.SyncBoards.Value);
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
-            _connected = true; _peer = peer; _isHost = isHost; _snapshotSent = false;
+            _connected = true; _isHost = isHost; _snapshotSent = false;
             _wasOpen.Clear(); _lastHash.Clear(); _pending.Clear();
         }
 
-        public static void OnDisconnected() { _connected = false; _peer = 0; }
+        public static void OnDisconnected() { _connected = false; }
 
         private static void Scan(float now)
         {
@@ -68,7 +67,7 @@ namespace PlayroomsCoop
             if (png.Length > MaxPng) { Plugin.Log.LogWarning($"[Whiteboards] board '{id}' picture too large to send ({png.Length / 1024} KB)"); return; }
             var w = Protocol.W.Begin(Msg.Whiteboard);
             w.Str(id); w.I32(png.Length); w.Bytes(png, png.Length);
-            w.SendTo(_peer, SteamNet.SendReliable);
+            w.SendAll(SteamNet.SendReliable);
         }
 
         public static void Tick(float now)

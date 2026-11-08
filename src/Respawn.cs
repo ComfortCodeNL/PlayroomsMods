@@ -7,9 +7,8 @@ namespace PlayroomsCoop
     {
         public static Feature Respawn;
 
-        private static bool _partnerDead, _partnerSafe, _localSafe, _sentSafe;
+        private static bool _localSafe, _sentSafe, _localDead;
         private static float _respawnAt = -1f, _respawnCooldownUntil, _nextSafeCheck, _followDeathAt = -1f;
-        private static bool _localDead;
         private static object _lockdown;
         private const float JumpscareTime = 2.5f;
 
@@ -17,7 +16,8 @@ namespace PlayroomsCoop
 
         private static void RespawnReset()
         {
-            _partnerDead = false; _partnerSafe = false; _localSafe = false; _sentSafe = false;
+            foreach (var p in Net.Peers.Values) { p.Dead = false; p.Safe = false; }
+            _localSafe = false; _sentSafe = false;
             _respawnAt = -1f; _followDeathAt = -1f; _localDead = false;
         }
 
@@ -41,16 +41,18 @@ namespace PlayroomsCoop
             float now = Time.realtimeSinceStartup;
             if (_respawnAt >= 0f || now < _respawnCooldownUntil) { result = false; return false; }
             bool day = IsDayPhase();
-            if (_partnerDead || !(day || _partnerSafe))
+            bool alive = false, safe = false;
+            foreach (var p in Net.Peers.Values) { if (!p.Dead) alive = true; if (!p.Dead && p.Safe) safe = true; }
+            if (!alive || !(day || safe))
             {
-                Plugin.Log.LogInfo($"[Respawn] caught with nobody safe (partner dead: {_partnerDead}, safe: {_partnerSafe}): normal death");
+                Plugin.Log.LogInfo($"[Respawn] caught with nobody safe (anyone alive: {alive}, anyone in the clean room: {safe}): normal death");
                 return true;
             }
             try { if (playJumpscare != null) R.Call(playJumpscare, "Invoke", new object[] { null }); }
             catch (Exception e) { Plugin.Log.LogWarning("[Respawn] jumpscare: " + e.Message); }
             _respawnAt = now + JumpscareTime;
-            Protocol.SendSimple(_peer, Msg.PlayerRespawned, SteamNet.SendReliable);
-            Plugin.Log.LogInfo("[Respawn] caught, partner is safe: back to the clean room");
+            Protocol.W.Begin(Msg.PlayerRespawned).SendAll(SteamNet.SendReliable);
+            Plugin.Log.LogInfo("[Respawn] caught, someone else is safe: back to the clean room");
             result = false;
             return false;
         }
@@ -59,7 +61,7 @@ namespace PlayroomsCoop
         {
             if (!started || !_connected) return;
             _localDead = true; _followDeathAt = -1f;
-            Protocol.SendSimple(_peer, Msg.PlayerDied, SteamNet.SendReliable);
+            Protocol.W.Begin(Msg.PlayerDied).SendAll(SteamNet.SendReliable);
             Plugin.Log.LogInfo("[Respawn] you died");
         }
 
@@ -71,7 +73,7 @@ namespace PlayroomsCoop
                 _respawnAt = -1f;
                 _respawnCooldownUntil = now + 8f;
                 BringHome();
-                CoopBehaviour.Notify("You were caught. Your partner is safe, so you're back in the clean room");
+                CoopBehaviour.Notify("You were caught. Someone else is safe, so you're back in the clean room");
             }
             if (now < _nextSafeCheck) return;
             _nextSafeCheck = now + 0.5f;
@@ -81,7 +83,7 @@ namespace PlayroomsCoop
             if (safe == _localSafe && _sentSafe) return;
             _localSafe = safe; _sentSafe = true;
             var w = Protocol.W.Begin(Msg.SafeState); w.U8(safe ? (byte)1 : (byte)0);
-            w.SendTo(_peer, SteamNet.SendReliable);
+            w.SendAll(SteamNet.SendReliable);
         }
 
         private static void BringHome()
@@ -106,24 +108,29 @@ namespace PlayroomsCoop
 
         private static void OnRespawnMessage(Msg type, byte[] buf, int len)
         {
+            var p = Net.Get(Net.Sender);
+            if (p == null) return;
             switch (type)
             {
                 case Msg.PlayerDied:
-                    _partnerDead = true;
-                    Plugin.Log.LogInfo("[Respawn] partner died");
-                    // nobody was safe, so the run is over for both of us; without this the client is left in a dead world
-                    if (!_localDead && _respawnAt < 0f) _followDeathAt = Time.realtimeSinceStartup + 1.5f;
+                    p.Dead = true;
+                    Plugin.Log.LogInfo($"[Respawn] {p.Name} died");
+                    if (!_localDead && _respawnAt < 0f) { _followDeathAt = Time.realtimeSinceStartup + 1.5f; _followName = p.Name; }
                     break;
                 case Msg.PlayerRespawned:
-                    CoopBehaviour.Notify("Your partner was caught and is back in the clean room");
+                    CoopBehaviour.Notify($"{p.Name} was caught and is back in the clean room");
                     break;
                 case Msg.SafeState:
-                    _partnerSafe = new Reader(buf, len, Protocol.HeaderSize).U8() == 1;
+                    p.Safe = new Reader(buf, len, Protocol.HeaderSize).U8() == 1;
                     break;
             }
         }
 
-        private static void RespawnNewDay() => _partnerDead = false;
+        private static void RespawnNewDay() { foreach (var p in Net.Peers.Values) p.Dead = false; }
+
+        internal static void OnPeerJoined() { _sentSafe = false; _capsSent = false; }
+
+        private static string _followName;
 
         private static void FollowPartnerDeath()
         {
@@ -133,8 +140,8 @@ namespace PlayroomsCoop
             if (es == null) return;
             try { if (Convert.ToBoolean(R.Get(es, "_deathFlowActive"))) return; } catch { }
             _localDead = true;
-            Plugin.Log.LogInfo("[Respawn] partner was caught with nobody safe: ending the run here too");
-            CoopBehaviour.Notify("Your partner was caught and nobody was safe. The run is over");
+            Plugin.Log.LogInfo("[Respawn] someone was caught with nobody safe: ending the run here too");
+            CoopBehaviour.Notify($"{SteamNet.Plain(_followName ?? "A player")} was caught and nobody was safe. The run is over");
             try { R.Set(es, "_deathFlowActive", true); } catch { }
             try { R.Call(es, "ShowGameOver"); }
             catch (Exception e) { Plugin.Log.LogWarning("[Respawn] game over: " + e.Message); }

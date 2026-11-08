@@ -12,9 +12,10 @@ namespace PlayroomsCoop
         private const int ChunkSize = 100 * 1024;
         private const int MaxSave = 32 * 1024 * 1024;
 
+        private sealed class Xfer { public uint Id; public readonly Queue<int> Queue = new Queue<int>(); }
         private static byte[] _outData;
-        private static uint _outXfer;
-        private static readonly Queue<int> _outQueue = new Queue<int>();
+        private static readonly Dictionary<ulong, Xfer> _xfers = new Dictionary<ulong, Xfer>();
+        private static readonly Dictionary<ulong, IntPtr> _sentTo = new Dictionary<ulong, IntPtr>();
         private static float _nextPump;
         private static uint _inXfer;
         private static float _lastChunkAt;
@@ -22,7 +23,7 @@ namespace PlayroomsCoop
         public static bool Enabled => Plugin.UseHostSave.Value;
 
         private static bool _saveRequested;
-        private static IntPtr _sentFor, _requestFor;
+        private static IntPtr _requestFor;
         private static float _sendAt;
 
         private static byte[] _incoming;
@@ -37,16 +38,18 @@ namespace PlayroomsCoop
 
         public static void OnConnected()
         {
-            _sentFor = IntPtr.Zero; _requestFor = IntPtr.Zero; _saveRequested = false;
+            _sentTo.Clear(); _requestFor = IntPtr.Zero; _saveRequested = false;
             _incoming = null; _got = null; _gotCount = 0; _pendingLoad = null; _returnRequested = false;
-            _outQueue.Clear(); _outData = null;
+            _xfers.Clear(); _outData = null;
             _sessionActive = true;
         }
 
         public static void OnHostStartGame()
         {
-            _sentFor = IntPtr.Zero; _saveRequested = false;
+            _sentTo.Clear(); _saveRequested = false;
         }
+
+        public static void OnPeerLeft(ulong id) { _xfers.Remove(id); _sentTo.Remove(id); }
 
         public static void OnClientBackInMenu()
         {
@@ -73,12 +76,15 @@ namespace PlayroomsCoop
             return null;
         }
 
-        public static void HostTick(float now, bool playing, ulong peer)
+        public static void HostTick(float now, bool playing, List<ulong> clients)
         {
-            PumpChunks(now, peer);
+            PumpChunks(now);
             if (!Enabled || !playing || !World.InGameWorld()) return;
             IntPtr world = World.WorldId();
-            if (world == IntPtr.Zero || world == _sentFor) return;
+            if (world == IntPtr.Zero) return;
+            var pending = new List<ulong>();
+            foreach (var c in clients) if (!_sentTo.TryGetValue(c, out var w0) || w0 != world) pending.Add(c);
+            if (pending.Count == 0) return;
             if (_saveRequested && world != _requestFor) _saveRequested = false;
             if (!_saveRequested)
             {
@@ -88,7 +94,8 @@ namespace PlayroomsCoop
                 return;
             }
             if (now < _sendAt) return;
-            _sentFor = world; _saveRequested = false;
+            _saveRequested = false;
+            foreach (var c in pending) _sentTo[c] = world;
 
             var helper = R.GetStatic(Helper, "Instance");
             int slot = helper != null ? R.Get<int>(helper, "ActiveSlot") : -1;
@@ -96,43 +103,54 @@ namespace PlayroomsCoop
             if (path == null || !File.Exists(path))
             {
                 Plugin.Log.LogWarning($"[HostSave] couldn't find the host's save file (slot {slot}, path {path})");
-                CoopBehaviour.Notify("Couldn't send your save: your partner keeps their own world");
+                CoopBehaviour.Notify("Couldn't send your save: the other players keep their own world");
                 return;
             }
             byte[] data = File.ReadAllBytes(path);
             int chunks = (data.Length + ChunkSize - 1) / ChunkSize;
-            _outData = data; _outXfer = (uint)new Random().Next(1, int.MaxValue);
-            _outQueue.Clear();
-            for (int i = 0; i < chunks; i++) _outQueue.Enqueue(i);
-            var w = Protocol.W.Begin(Msg.SaveOffer); w.I32(data.Length); w.I32(chunks); w.U32(_outXfer);
-            w.SendTo(peer, SteamNet.SendReliable);
-            Plugin.Log.LogInfo($"[HostSave] sending the host's save (slot {slot}, {data.Length / 1024} KB in {chunks} parts)");
-        }
-
-        private static void PumpChunks(float now, ulong peer)
-        {
-            if (_outQueue.Count == 0 || _outData == null || now < _nextPump) return;
-            for (int k = 0; k < 2 && _outQueue.Count > 0; k++)
+            _outData = data;
+            var rng = new Random();
+            foreach (var c in pending)
             {
-                int i = _outQueue.Peek();
-                int chunks = (_outData.Length + ChunkSize - 1) / ChunkSize;
-                int off = i * ChunkSize, n = Math.Min(ChunkSize, _outData.Length - off);
-                var c = Protocol.W.Begin(Msg.SaveChunk); c.U32(_outXfer); c.I32(i); c.I32(n);
-                c.Bytes(_outData.AsSpan(off, n).ToArray(), n);
-                if (!c.SendTo(peer, SteamNet.SendReliable)) { _nextPump = now + 0.2f; return; }
-                _outQueue.Dequeue();
-                if (_outQueue.Count == 0) Plugin.Log.LogInfo($"[HostSave] sent the host's save ({chunks} parts)");
+                var x = new Xfer { Id = (uint)rng.Next(1, int.MaxValue) };
+                for (int i = 0; i < chunks; i++) x.Queue.Enqueue(i);
+                _xfers[c] = x;
+                var w = Protocol.W.Begin(Msg.SaveOffer); w.I32(data.Length); w.I32(chunks); w.U32(x.Id);
+                w.SendTo(c, SteamNet.SendReliable);
+                Plugin.Log.LogInfo($"[HostSave] sending the host's save to {Net.NameOf(c)} (slot {slot}, {data.Length / 1024} KB in {chunks} parts)");
             }
         }
 
-        public static void HandleResend(byte[] buf, int len)
+        private static void PumpChunks(float now)
+        {
+            if (_xfers.Count == 0 || _outData == null || now < _nextPump) return;
+            int budget = 2;
+            foreach (var kv in _xfers)
+            {
+                var x = kv.Value;
+                while (budget > 0 && x.Queue.Count > 0)
+                {
+                    int i = x.Queue.Peek();
+                    int chunks = (_outData.Length + ChunkSize - 1) / ChunkSize;
+                    int off = i * ChunkSize, n = Math.Min(ChunkSize, _outData.Length - off);
+                    var c = Protocol.W.Begin(Msg.SaveChunk); c.U32(x.Id); c.I32(i); c.I32(n);
+                    c.Bytes(_outData.AsSpan(off, n).ToArray(), n);
+                    if (!c.SendTo(kv.Key, SteamNet.SendReliable)) { _nextPump = now + 0.2f; return; }
+                    x.Queue.Dequeue(); budget--;
+                    if (x.Queue.Count == 0) Plugin.Log.LogInfo($"[HostSave] sent the host's save to {Net.NameOf(kv.Key)} ({chunks} parts)");
+                }
+                if (budget == 0) return;
+            }
+        }
+
+        public static void HandleResend(ulong from, byte[] buf, int len)
         {
             var r = new Reader(buf, len, Protocol.HeaderSize);
             uint xfer = r.U32(); int n = r.U16();
-            if (xfer != _outXfer || _outData == null) return;
-            var have = new HashSet<int>(_outQueue);
-            for (int i = 0; i < n; i++) { int idx = r.I32(); if (have.Add(idx)) _outQueue.Enqueue(idx); }
-            Plugin.Log.LogInfo($"[HostSave] resending {n} missing parts");
+            if (!_xfers.TryGetValue(from, out var x) || xfer != x.Id || _outData == null) return;
+            var have = new HashSet<int>(x.Queue);
+            for (int i = 0; i < n; i++) { int idx = r.I32(); if (have.Add(idx)) x.Queue.Enqueue(idx); }
+            Plugin.Log.LogInfo($"[HostSave] resending {n} missing parts to {Net.NameOf(from)}");
         }
 
         public static void ClientResendTick(float now, ulong peer)

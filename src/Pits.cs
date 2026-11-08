@@ -114,11 +114,8 @@ namespace PlayroomsCoop
         private static Vector3 DropStart(object pit)
         {
             Vector3 rim = (Vector3)R.Call(pit, "GetPitRimCenter");
-            if (RemoteHead.HasValue)
-            {
-                var d = RemoteHead.Value - rim;
-                if (d.x * d.x + d.y * d.y + d.z * d.z < 36f) return RemoteHead.Value + new Vector3(0f, -0.3f, 0f);
-            }
+            var pr = Net.NearestOther(rim, out float d);
+            if (pr != null && d < 6f) return pr.Head.Value + new Vector3(0f, -0.3f, 0f);
             return rim + new Vector3(0f, 1.5f, 0f);
         }
 

@@ -12,8 +12,11 @@ namespace PlayroomsCoop
         {
             public Kind Kind; public int Index; public object Ref;
             public bool Frozen; public bool OrigKinematic;
-            public bool Mine;
-            public float LastCarried;
+            public ulong Owner;
+            public bool ByCarry;
+            public float OwnerSince, LastCarried;
+            public ulong PrevOwner; public float WaitFinalUntil; public int HeldDelta;
+            public bool Mine => Owner == Net.Me;
             public bool HasPose;
             public readonly List<(float t, Vector3 p, Quaternion r)> Samples = new List<(float, Vector3, Quaternion)>();
             public bool CollidersOff;
@@ -30,27 +33,26 @@ namespace PlayroomsCoop
 
         public static Feature Feature;
         private static bool _connected, _isHost;
-        private static ulong _peer;
         private static readonly Dictionary<(Kind, int), Obj> _objs = new Dictionary<(Kind, int), Obj>();
         private static readonly HashSet<(Kind, int)> _dupWarned = new HashSet<(Kind, int)>();
         private static readonly HashSet<(Kind, int)> _missingWarned = new HashSet<(Kind, int)>();
         private static string _lastStationList;
-        private static float _lastScan = -99f, _nextSend, _nextCarrySend, _clockOffset;
-        private static bool _hasOffset;
+        private static float _lastScan = -99f, _nextSend, _nextCarrySend, _nextAssign;
         private const float Delay = 0.1f;
+        private static bool _announce;
 
         public static void Init() => Feature = new Feature("Robots/Vacuums", Plugin.SyncObjects.Value);
         public static void NewWorld() => Feature.Rearm(Plugin.SyncObjects.Value);
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
-            _connected = true; _peer = peer; _isHost = isHost; _hasOffset = false;
+            _connected = true; _isHost = isHost; _announce = isHost;
             _objs.Clear(); _lastScan = -99f;
         }
 
         public static void OnDisconnected()
         {
-            _connected = false; _peer = 0;
+            _connected = false;
             foreach (var o in _objs.Values) Feature.Try(() => Unfreeze(o), "unfreeze");
             _objs.Clear();
         }
@@ -71,7 +73,7 @@ namespace PlayroomsCoop
                     return;
                 }
                 if (_objs.TryGetValue(key, out var o)) { o.Ref = r; return; }
-                _objs[key] = new Obj { Kind = kind, Index = index, Ref = r, Mine = _isHost };
+                _objs[key] = new Obj { Kind = kind, Index = index, Ref = r, Owner = Net.HostId, OwnerSince = Time.realtimeSinceStartup };
             }
             foreach (var r in R.FindAll(R.T(RobotT))) Add(Kind.Robot, r, Convert.ToInt32(R.Get(r, "robotIndex")));
             foreach (var v in R.FindAll(R.T(VacuumT))) Add(Kind.Vacuum, v, Convert.ToInt32(R.Get(v, "DeviceIndex")));
@@ -84,6 +86,11 @@ namespace PlayroomsCoop
                     var p = ((Component)kv.Value.Ref).transform.position;
                     ids.Add($"{kv.Key.Item2}@({p.x:0.0},{p.y:0.0},{p.z:0.0})");
                 }
+            if (_announce && _objs.Count > 0)
+            {
+                _announce = false;
+                foreach (var o in _objs.Values) { var w = Begin(Msg.ObjOwner, o); w.U64(o.Owner); w.SendAll(SteamNet.SendReliable); }
+            }
             string list = string.Join(" ", ids);
             if (list != _lastStationList) { _lastStationList = list; Plugin.Log.LogInfo("[Objects] charging stations here: " + (list.Length > 0 ? list : "none")); }
         }
@@ -91,6 +98,11 @@ namespace PlayroomsCoop
         private static bool Carried(Obj o) => Convert.ToBoolean(R.Get(o.Ref, "IsCarried"));
         private static int Stored(Obj o) => o.Kind == Kind.Station ? 0 : Convert.ToInt32(R.Get(o.Ref, "StoredBalls"));
         private static void SetStored(Obj o, int v) { if (o.Kind != Kind.Station) R.Set(o.Ref, "StoredBalls", Math.Max(0, Math.Min(v, 100000))); }
+        private static float Battery(Obj o)
+        {
+            if (o.Kind != Kind.Robot) return -1f;
+            try { return R.Get<float>(o.Ref, "BatteryFraction"); } catch { return -1f; }
+        }
         private static bool Flag(Obj o) => o.Kind == Kind.Robot && Convert.ToBoolean(R.Get(o.Ref, "IsPaused"));
 
         private static void SetFlag(Obj o, bool v, bool owner)
@@ -154,26 +166,43 @@ namespace PlayroomsCoop
                 foreach (var o in _objs.Values)
                 {
                     if (!World.Alive(o.Ref)) continue;
+                    if (o.Owner != Net.Me && o.Owner != Net.HostId && Net.Get(o.Owner) == null) { o.Owner = Net.HostId; o.ByCarry = false; o.OwnerSince = now; o.Samples.Clear(); o.HasPose = false; }
                     if (o.Mine) TickOwned(o, now, send, carrySend);
                     else TickMirror(o, now, dt);
                 }
+                if (_isHost && now >= _nextAssign) { _nextAssign = now + 2f; AssignOwners(now); }
             }, "tick");
         }
 
         private static void TickOwned(Obj o, float now, bool send, bool carrySend)
         {
+            if (o.WaitFinalUntil > 0f)
+            {
+                if (now < o.WaitFinalUntil) return;
+                o.WaitFinalUntil = 0f;
+                if (o.HeldDelta != 0) { SetStored(o, Stored(o) + o.HeldDelta); o.HeldDelta = 0; }
+                Plugin.Log.LogWarning($"[Objects] {o.Kind} {o.Index}: no hand-off count from {Net.NameOf(o.PrevOwner)}; using the last known one");
+            }
             Unfreeze(o);
             bool carried = Carried(o);
             if (carried) o.LastCarried = now;
 
-            if (!_isHost && !carried && now - o.LastCarried > 2.5f)
+            if (_isHost && o.ByCarry && !carried && now - o.LastCarried > 2.5f)
+            {
+                o.ByCarry = false; o.OwnerSince = now;
+                var wr = Begin(Msg.ObjRelease, o);
+                WritePose(wr, ((Component)o.Ref).transform); wr.I32(Stored(o)); wr.U8(Flag(o) ? (byte)1 : (byte)0);
+                wr.SendAll(SteamNet.SendReliable);
+            }
+            if (!_isHost && o.ByCarry && !carried && now - o.LastCarried > 2.5f)
             {
                 var t0 = ((Component)o.Ref).transform;
                 var w0 = Begin(Msg.ObjRelease, o);
                 WritePose(w0, t0); w0.I32(Stored(o)); w0.U8(Flag(o) ? (byte)1 : (byte)0);
-                w0.SendTo(_peer, SteamNet.SendReliable);
+                w0.SendAll(SteamNet.SendReliable);
                 Plugin.Log.LogInfo($"[Objects] put down {o.Kind} {o.Index}: handed back to the host");
-                o.Mine = false; o.HasPose = false; o.MirroredStored = int.MinValue; o.HasFlag = false; o.Samples.Clear();
+                o.Owner = Net.HostId; o.ByCarry = false; o.OwnerSince = now;
+                o.HasPose = false; o.MirroredStored = int.MinValue; o.HasFlag = false; o.Samples.Clear();
                 Freeze(o);
                 return;
             }
@@ -188,20 +217,22 @@ namespace PlayroomsCoop
             o.SentPos = pos; o.SentEuler = e; o.SentStored = stored; o.SentFlag = flag; o.SentCarried = carried; o.SentAt = now;
             var w = Begin(Msg.ObjState, o);
             w.F32(now); WritePose(w, t); w.I32(stored); w.U8(flag ? (byte)1 : (byte)0); w.U8(carried ? (byte)1 : (byte)0);
-            w.SendTo(_peer, SteamNet.SendUnreliable);
+            w.F32(Battery(o));
+            w.SendAll(SteamNet.SendUnreliable);
         }
 
         private static void TickMirror(Obj o, float now, float dt)
         {
-            if (Carried(o))
+            if (Carried(o) && !(o.ByCarry && Net.SlotOf(o.Owner) < Net.MySlot))
             {
                 if (now - o.ClaimSentAt > 1f)
                 {
                     o.ClaimSentAt = now;
-                    Begin(Msg.ObjClaim, o).SendTo(_peer, SteamNet.SendReliable);
-                    if (!o.Mine) Plugin.Log.LogInfo($"[Objects] picked up {o.Kind} {o.Index}: you move it now");
+                    Begin(Msg.ObjClaim, o).SendAll(SteamNet.SendReliable);
+                    Plugin.Log.LogInfo($"[Objects] picked up {o.Kind} {o.Index}: you move it now");
                 }
-                o.Mine = true; o.LastCarried = now; o.SentStored = int.MinValue;
+                o.PrevOwner = o.Owner;
+                o.Owner = Net.Me; o.ByCarry = true; o.OwnerSince = now; o.LastCarried = now; o.SentStored = int.MinValue;
                 Unfreeze(o);
                 return;
             }
@@ -214,7 +245,7 @@ namespace PlayroomsCoop
                 if (f != o.MirroredFlag)
                 {
                     o.MirroredFlag = f;
-                    var w = Begin(Msg.ObjFlag, o); w.U8(f ? (byte)1 : (byte)0); w.SendTo(_peer, SteamNet.SendReliable);
+                    var w = Begin(Msg.ObjFlag, o); w.U8(f ? (byte)1 : (byte)0); Net.SendTo(o.Owner, w, SteamNet.SendReliable);
                 }
             }
             if (o.MirroredStored != int.MinValue)
@@ -222,14 +253,14 @@ namespace PlayroomsCoop
                 int s = Stored(o);
                 if (s != o.MirroredStored)
                 {
-                    var w = Begin(Msg.ObjDelta, o); w.I32(s - o.MirroredStored); w.SendTo(_peer, SteamNet.SendReliable);
+                    var w = Begin(Msg.ObjDelta, o); w.I32(s - o.MirroredStored); Net.SendTo(o.Owner, w, SteamNet.SendReliable);
                     o.MirroredStored = s;
                 }
             }
 
             if (!o.HasPose || o.Samples.Count == 0) return;
             var smp = o.Samples;
-            float renderT = now - _clockOffset - Delay;
+            float renderT = now - Delay;
             Vector3 pos = smp[smp.Count - 1].p; Quaternion rot = smp[smp.Count - 1].r;
             if (renderT <= smp[0].t) { pos = smp[0].p; rot = smp[0].r; }
             else
@@ -244,6 +275,50 @@ namespace PlayroomsCoop
                     }
             var t = ((Component)o.Ref).transform;
             t.position = pos; t.rotation = rot;
+        }
+
+        private static void AssignOwners(float now)
+        {
+            foreach (var o in _objs.Values)
+            {
+                if (o.Kind != Kind.Robot || o.ByCarry || !World.Alive(o.Ref) || now - o.OwnerSince < 8f) continue;
+                if (o.Mine && Carried(o)) continue;
+                var at = ((Component)o.Ref).transform.position;
+                ulong best = 0; float bestD = float.MaxValue, ownerD = float.MaxValue;
+                foreach (var id in Net.WorkSplit())
+                {
+                    var h = Net.HeadOf(id);
+                    if (!h.HasValue || Math.Abs(h.Value.y - at.y) > 4f) continue;
+                    float d = (float)Math.Sqrt(Dist2(h.Value, at));
+                    if (d < bestD) { bestD = d; best = id; }
+                    if (id == o.Owner) ownerD = d;
+                }
+                if (best == 0 || best == o.Owner) continue;
+                if (bestD > 12f || ownerD < 20f) continue;
+                bool wasMine = o.Mine;
+                o.PrevOwner = o.Owner;
+                o.Owner = best; o.OwnerSince = now; o.HasPose = false; o.Samples.Clear();
+                o.SentStored = int.MinValue; o.MirroredStored = int.MinValue; o.HasFlag = false;
+                if (best != Net.Me) Freeze(o);
+                else if (!wasMine) { o.WaitFinalUntil = now + 1.5f; o.HeldDelta = 0; }
+                var w = Begin(Msg.ObjOwner, o); w.U64(best); w.SendAll(SteamNet.SendReliable);
+                if (wasMine) SendFinal(o);
+                Plugin.Log.LogInfo($"[Objects] robot {o.Index} now runs on {Net.NameOf(best)}'s game ({bestD:0} m away)");
+            }
+        }
+
+        private static void SendFinal(Obj o)
+        {
+            var w = Begin(Msg.ObjFinal, o);
+            WritePose(w, ((Component)o.Ref).transform); w.I32(Stored(o)); w.U8(Flag(o) ? (byte)1 : (byte)0); w.F32(Battery(o));
+            w.SendAll(SteamNet.SendReliable);
+        }
+
+        private static void Forward(Obj o, Msg type, Action<Writer> body)
+        {
+            if (o.Owner == 0 || o.Owner == Net.Me) return;
+            var w = Begin(type, o); body(w);
+            Net.SendTo(o.Owner, w, SteamNet.SendReliable);
         }
 
         private static float Dist2(Vector3 a, Vector3 b) { float x = a.x - b.x, y = a.y - b.y, z = a.z - b.z; return x * x + y * y + z * z; }
@@ -283,7 +358,7 @@ namespace PlayroomsCoop
                 if (string.IsNullOrEmpty(name)) return;
                 var w = Begin(Msg.RobotSay, o); w.Str(name); w.U8(interrupt ? (byte)1 : (byte)0);
                 w.F32(R.Get<float>(clip, "length"));
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
             }, "send voice line");
         }
 
@@ -343,7 +418,7 @@ namespace PlayroomsCoop
                 Scan(Time.realtimeSinceStartup);
                 if (!_objs.TryGetValue(key, out o))
                 {
-                    if (_missingWarned.Add(key)) Plugin.Log.LogWarning($"[Objects] partner's {key.Item1} {key.Item2} isn't in this world");
+                    if (_missingWarned.Add(key)) Plugin.Log.LogWarning($"[Objects] {Net.NameOf(Net.Sender)}'s {key.Item1} {key.Item2} isn't in this world");
                     return;
                 }
             }
@@ -358,19 +433,19 @@ namespace PlayroomsCoop
                     if (type == Msg.ObjState)
                     {
                         sentAt = r.F32();
-                        float off = now - sentAt;
-                        if (!_hasOffset || off < _clockOffset) { _clockOffset = off; _hasOffset = true; }
-                        else _clockOffset += (off - _clockOffset) * 0.01f;
+                        sentAt += Net.Offset(Net.Sender, sentAt);
                     }
                     var pos = new Vector3(r.F32(), r.F32(), r.F32());
                     var euler = new Vector3(r.F32(), r.F32(), r.F32());
                     int stored = r.I32(); bool flag = r.U8() == 1;
                     bool carried = type == Msg.ObjState && r.Remaining > 0 && r.U8() == 1;
+                    float battery = type == Msg.ObjState && r.Remaining >= 4 ? r.F32() : -1f;
                     if (type == Msg.ObjRelease)
                     {
+                        o.Owner = Net.HostId; o.ByCarry = false; o.OwnerSince = now; o.Samples.Clear(); o.HasPose = false;
+                        if (!_isHost) return;
                         Feature.Try(() =>
                         {
-                            o.Mine = true; o.Samples.Clear();
                             Unfreeze(o);
                             if (o.Kind == Kind.Vacuum) R.Call(o.Ref, "TeleportTo", pos, Quaternion.Euler(euler.x, euler.y, euler.z));
                             else if (o.Kind == Kind.Station)
@@ -388,7 +463,12 @@ namespace PlayroomsCoop
                         }, "take back");
                         return;
                     }
-                    if (o.Mine) return;
+                    if (carried && Net.Sender != o.Owner && !(o.Mine && Carried(o)))
+                    {
+                        o.Owner = Net.Sender; o.ByCarry = true; o.OwnerSince = now; o.Samples.Clear();
+                        Feature.Try(() => Freeze(o), "freeze");
+                    }
+                    if (o.Mine || Net.Sender != o.Owner) return;
                     var rot = Quaternion.Euler(euler.x, euler.y, euler.z);
                     if (o.Samples.Count > 0 && Dist2(pos, o.Samples[o.Samples.Count - 1].p) > 25f) o.Samples.Clear();
                     int at = o.Samples.Count;
@@ -406,6 +486,7 @@ namespace PlayroomsCoop
                         }
                         if (Stored(o) != stored) SetStored(o, stored);
                         o.MirroredStored = stored;
+                        if (battery >= 0f && o.Kind == Kind.Robot) R.Set(o.Ref, "BatteryFraction", battery);
                         if (!o.HasFlag || Flag(o) != flag) SetFlag(o, flag, false);
                         o.MirroredFlag = flag; o.HasFlag = true;
                     }, "mirror");
@@ -418,20 +499,72 @@ namespace PlayroomsCoop
                     break;
                 }
                 case Msg.ObjClaim:
-                    Plugin.Log.LogInfo($"[Objects] partner picked up {o.Kind} {o.Index}");
-                    o.Mine = false; o.HasPose = false; o.Samples.Clear(); o.SentStored = int.MinValue;
+                {
+                    ulong from = Net.Sender;
+                    if (o.ByCarry && o.Owner != from && Net.SlotOf(o.Owner) < Net.SlotOf(from)) break;
+                    Plugin.Log.LogInfo($"[Objects] {Net.NameOf(from)} picked up {o.Kind} {o.Index}");
+                    bool wasMine = o.Mine;
+                    o.PrevOwner = o.Owner;
+                    o.Owner = from; o.ByCarry = true; o.OwnerSince = now;
+                    if (wasMine) Feature.Try(() => { Freeze(o); SendFinal(o); }, "hand-off");
+                    o.HasPose = false; o.Samples.Clear(); o.SentStored = int.MinValue;
                     Feature.Try(() => Freeze(o), "freeze");
                     break;
+                }
+                case Msg.ObjOwner:
+                {
+                    ulong to = r.U64();
+                    if (Net.Sender != Net.HostId || o.ByCarry) break;
+                    if (to == o.Owner) break;
+                    bool wasMine = o.Mine;
+                    o.PrevOwner = o.Owner;
+                    o.Owner = to; o.OwnerSince = now; o.HasPose = false; o.Samples.Clear();
+                    o.SentStored = int.MinValue; o.MirroredStored = int.MinValue; o.HasFlag = false;
+                    if (to == Net.Me)
+                    {
+                        o.WaitFinalUntil = now + 1.5f; o.HeldDelta = 0;
+                        Plugin.Log.LogInfo($"[Objects] {o.Kind} {o.Index} runs on your game now (you're nearest)");
+                    }
+                    else Feature.Try(() => { Freeze(o); if (wasMine) SendFinal(o); }, "hand-off");
+                    break;
+                }
                 case Msg.ObjFlag:
                 {
                     bool flag = r.U8() == 1;
                     if (o.Mine) Feature.Try(() => SetFlag(o, flag, true), "remote toggle");
+                    else if (o.Owner != Net.Sender) Forward(o, Msg.ObjFlag, w => w.U8(flag ? (byte)1 : (byte)0));
                     break;
                 }
                 case Msg.ObjDelta:
                 {
                     int delta = r.I32();
-                    if (o.Mine) Feature.Try(() => SetStored(o, Stored(o) + delta), "remote balls");
+                    if (o.Mine && o.WaitFinalUntil > 0f) o.HeldDelta += delta;
+                    else if (o.Mine) Feature.Try(() => SetStored(o, Stored(o) + delta), "remote balls");
+                    else if (o.Owner != Net.Sender) Forward(o, Msg.ObjDelta, w => w.I32(delta));
+                    break;
+                }
+                case Msg.ObjFinal:
+                {
+                    var pos = new Vector3(r.F32(), r.F32(), r.F32());
+                    var euler = new Vector3(r.F32(), r.F32(), r.F32());
+                    int stored = r.I32(); bool flag = r.U8() == 1; float battery = r.F32();
+                    if (Net.Sender != o.PrevOwner && !(_isHost && o.Mine && now - o.OwnerSince < 3f)) break;
+                    Feature.Try(() =>
+                    {
+                        if (o.Mine)
+                        {
+                            if (o.WaitFinalUntil > 0f)
+                            {
+                                var t = ((Component)o.Ref).transform;
+                                t.position = pos; t.rotation = Quaternion.Euler(euler.x, euler.y, euler.z);
+                            }
+                            SetStored(o, stored + o.HeldDelta); o.HeldDelta = 0; o.WaitFinalUntil = 0f;
+                            if (Flag(o) != flag) SetFlag(o, flag, true);
+                            if (battery >= 0f && o.Kind == Kind.Robot) R.Set(o.Ref, "BatteryFraction", battery);
+                            Plugin.Log.LogInfo($"[Objects] {o.Kind} {o.Index} handed over from {Net.NameOf(Net.Sender)} with {stored} balls inside");
+                        }
+                        else if (Stored(o) != stored) { SetStored(o, stored); o.MirroredStored = stored; }
+                    }, "hand-off");
                     break;
                 }
             }

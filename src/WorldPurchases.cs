@@ -9,7 +9,6 @@ namespace PlayroomsCoop
 
         public static Feature Feature;
         private static bool _connected, _baselined, _snapshotSent, _isHost;
-        private static ulong _peer;
         private static bool _applying;
         private static object _stats;
         private static readonly Dictionary<string, int> _last = new Dictionary<string, int>();
@@ -21,12 +20,12 @@ namespace PlayroomsCoop
 
         public static void Init() => Feature = new Feature("Unlocks", Plugin.SyncUnlocks.Value);
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
-            _connected = true; _peer = peer; _isHost = isHost; _baselined = false; _snapshotSent = false;
+            _connected = true; _isHost = isHost; _baselined = false; _snapshotSent = false;
             _last.Clear();
         }
-        public static void OnDisconnected() { _connected = false; _peer = 0; }
+        public static void OnDisconnected() { _connected = false; }
 
         private static object Stats()
         {
@@ -125,7 +124,7 @@ namespace PlayroomsCoop
                     var w = Protocol.W.Begin(Msg.StatSet);
                     w.U16((ushort)n);
                     for (int i = 0; i < n; i++) { w.Str(changed[start + i].Item1); w.I32(changed[start + i].Item2); }
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                 }
             }, "poll unlocks");
         }
@@ -157,7 +156,7 @@ namespace PlayroomsCoop
                 }
                 if (applied > 0)
                 {
-                    Plugin.Log.LogInfo($"Partner's world purchases applied: {applied}");
+                    Plugin.Log.LogInfo($"Another player's world purchases applied: {applied}");
                 }
             }, "apply unlocks");
         }

@@ -15,11 +15,11 @@ namespace PlayroomsCoop
 
         public static Feature Wallet, Feature;
         private static bool _connected, _isHost, _walletReady, _baselined;
-        private static ulong _peer;
         public static bool Applying { get; private set; }
         private static bool _replayingPurchase;
 
         internal static bool OnEquipPurchasedTool() => !_replayingPurchase;
+        internal static bool IsReplayingPurchase => _replayingPurchase;
 
         private static object _skillService;
         private static Dictionary<string, int> _lastBalances = new Dictionary<string, int>();
@@ -36,9 +36,9 @@ namespace PlayroomsCoop
             Wallet = new Feature("Wallet", Plugin.SharedWallet.Value);
         }
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
-            _connected = true; _peer = peer; _isHost = isHost;
+            _connected = true; _isHost = isHost;
             WalletReset();
             _walletReady = isHost || !Wallet.Enabled;
             _baselined = false;
@@ -47,7 +47,7 @@ namespace PlayroomsCoop
             _pendingSnapshot = null;
         }
 
-        public static void OnDisconnected() { _connected = false; _peer = 0; }
+        public static void OnDisconnected() { _connected = false; }
 
         public static void Tick(float now)
         {
@@ -84,7 +84,7 @@ namespace PlayroomsCoop
                     if (!_lastLevels.TryGetValue(kv.Key, out int last)) continue;
                     if (kv.Value <= last) continue;
                     var w = Protocol.W.Begin(Msg.SkillUp); w.Str(kv.Key); w.I32(kv.Value);
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                     Plugin.Log.LogInfo($"Upgrade bought here: {kv.Key} -> level {kv.Value}");
                 }
                 _lastLevels = levels;
@@ -104,7 +104,7 @@ namespace PlayroomsCoop
                         _lastPurchases[kv.Key] = count;
                         if (!known || count <= last) continue;
                         var w = Protocol.W.Begin(Msg.ShopBuy); w.Str(kv.Key); w.I32(count);
-                        w.SendTo(_peer, SteamNet.SendReliable);
+                        w.SendAll(SteamNet.SendReliable);
                         Plugin.Log.LogInfo($"Shop item bought here: {kv.Key} (owned {count})");
                     }
                 }, "shop poll");
@@ -194,19 +194,19 @@ namespace PlayroomsCoop
                 });
                 if (failure != null)
                 {
-                    Plugin.Log.LogInfo($"Partner's upgrade {skillId} level {cur + 1} not available here yet (room or requirement not reached)");
+                    Plugin.Log.LogInfo($"Another player's upgrade {skillId} level {cur + 1} not available here yet (room or requirement not reached)");
                     break;
                 }
                 int now = Convert.ToInt32(R.Call(ss, "GetSkillLevel", skillId));
                 if (now <= cur)
                 {
-                    Plugin.Log.LogWarning($"Couldn't apply partner's upgrade {skillId} (requirements not met in this world yet)");
+                    Plugin.Log.LogWarning($"Couldn't apply another player's upgrade {skillId} (requirements not met in this world yet)");
                     break;
                 }
-                Plugin.Log.LogInfo($"Partner's upgrade applied: {skillId} -> level {now}");
+                Plugin.Log.LogInfo($"Another player's upgrade applied: {skillId} -> level {now}");
             }
             _lastLevels = LiveLevels(ss);
-            if (notify) CoopBehaviour.Notify($"Partner bought: {SteamNet.Plain(Pretty(skillId))}");
+            if (notify) CoopBehaviour.Notify($"{SteamNet.Plain(Net.NameOf(Net.Sender))} bought: {SteamNet.Plain(Pretty(skillId))}");
             RefreshWindows();
         }
 
@@ -215,7 +215,7 @@ namespace PlayroomsCoop
             RefreshShop(UnityEngine.Time.realtimeSinceStartup, !_shopItems.ContainsKey(key));
             if (!_shopItems.TryGetValue(key, out var item) || !World.Alive(item))
             {
-                Plugin.Log.LogWarning($"Partner's purchase '{key}' isn't in this world");
+                Plugin.Log.LogWarning($"Another player's purchase '{key}' isn't in this world");
                 return;
             }
             var ss = SkillService();
@@ -235,13 +235,13 @@ namespace PlayroomsCoop
                     finally { _replayingPurchase = false; }
                 });
                 int now = Convert.ToInt32(R.Get(item, "PurchasedCount"));
-                if (now <= cur) { Plugin.Log.LogWarning($"Couldn't apply partner's purchase {key}"); break; }
-                Plugin.Log.LogInfo($"Partner's purchase applied: {key} (owned {now})");
+                if (now <= cur) { Plugin.Log.LogWarning($"Couldn't apply another player's purchase {key}"); break; }
+                Plugin.Log.LogInfo($"Another player's purchase applied: {key} (owned {now})");
             }
             _lastPurchases[key] = Convert.ToInt32(R.Get(item, "PurchasedCount"));
             string name = key;
             try { name = R.Get<string>(item, "ItemName") ?? key; } catch { }
-            if (notify) CoopBehaviour.Notify($"Partner bought: {SteamNet.Plain(name)}");
+            if (notify) CoopBehaviour.Notify($"{SteamNet.Plain(Net.NameOf(Net.Sender))} bought: {SteamNet.Plain(name)}");
             RefreshWindows();
         }
 
@@ -280,7 +280,7 @@ namespace PlayroomsCoop
                     if (World.Alive(kv.Value)) counts.Add((kv.Key, Convert.ToInt32(R.Get(kv.Value, "PurchasedCount"))));
             w.U16((ushort)counts.Count);
             foreach (var (k, c) in counts) { w.Str(k); w.I32(c); }
-            w.SendTo(_peer, SteamNet.SendReliable);
+            w.SendAll(SteamNet.SendReliable);
             Plugin.Log.LogInfo($"Sent upgrade snapshot: wallet {(sendWallet ? "yes" : "no")}, {levels.Count} skills, {counts.Count} shop items");
         }
 
@@ -347,12 +347,15 @@ namespace PlayroomsCoop
                 {
                     string id = r.Str(); int d = r.I32(); uint seq = r.U32();
                     if (!Wallet.Enabled) return;
-                    Wallet.Try(() => { var ss = SkillService(); if (ss != null) OnWalletDelta(ss, id, d, seq); }, "apply wallet");
+                    ulong from = Net.Sender;
+                    Wallet.Try(() => { var ss = SkillService(); if (ss != null) OnWalletDelta(ss, from, id, d, seq); }, "apply wallet");
                     break;
                 }
                 case Msg.WalletState:
                 {
-                    uint ack = r.U32(); int n = r.U16();
+                    uint ack = 0; int na = r.U8();
+                    for (int i = 0; i < na; i++) { ulong who = r.U64(); uint a = r.U32(); if (who == Net.Me) ack = a; }
+                    int n = r.U16();
                     var host = new Dictionary<string, int>();
                     for (int i = 0; i < n; i++) { string id = r.Str(); host[id] = r.I32(); }
                     if (!Wallet.Enabled) return;

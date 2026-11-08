@@ -16,13 +16,12 @@ namespace PlayroomsCoop
                 object active = null;
                 try { active = R.Get(_ballService, "_activePhysicsBalls"); }
                 catch (Exception e) { if (_stepWarned.Add("_activePhysicsBalls")) Plugin.Log.LogWarning("[Balls] can't see moving balls: " + e.Message); }
-                var me = LocalHead; var them = RemoteHead;
+                var me = LocalHead;
                 if (active != null && me != null)
                 {
                     var tracked = new HashSet<IntPtr>();
                     foreach (var mv in _moving.Values) tracked.Add(R.Ptr(mv.Ball));
                     foreach (var pp0 in _puppets.Values) tracked.Add(R.Ptr(pp0.Ball));
-                    // big piles wake hundreds of balls: read a slice per scan, cheapest checks first
                     var all = R.Items(active, _scanCursor, ScanBudget, out int n);
                     if (n < 0) n = all.Count;
                     int budget = all.Count;
@@ -35,7 +34,7 @@ namespace PlayroomsCoop
                         bool quiet = LocalSweepNear(bpos, now);
                         float dMe = HDist(bpos, me.Value);
                         if (!quiet && dMe > 6f) continue;
-                        if (!quiet && them != null && HDist(bpos, them.Value) < dMe) continue;
+                        if (!quiet && OtherCloserH(bpos, dMe)) continue;
                         var spot = R.Get(ball, "Owner");
                         if (spot == null) continue;
                         IntPtr p = R.Ptr(spot);
@@ -104,7 +103,7 @@ namespace PlayroomsCoop
             if (_moving.Count > 0 && now - _lastMoveLog > 10f)
             {
                 _lastMoveLog = now;
-                Plugin.Log.LogInfo($"[Balls] tracking {_moving.Count} moving balls ({_quietCount} swept, rest only; sent {_liveSentCount} live updates, received {_liveRecvCount}; {_restSkipped} rests already matched, {_restApplied} corrected; vents: {_ventFedHere} eaten here, {_ventFed} fed for partner)");
+                Plugin.Log.LogInfo($"[Balls] tracking {_moving.Count} moving balls ({_quietCount} swept, rest only; sent {_liveSentCount} live updates, received {_liveRecvCount}; {_restSkipped} rests already matched, {_restApplied} corrected; vents: {_ventFedHere} eaten here, {_ventFed} fed for others)");
             }
 
             if (_settleCool.Count > 500) _settleCool.Clear();
@@ -132,7 +131,7 @@ namespace PlayroomsCoop
             if (_puppets.ContainsKey(p) || _moving.ContainsKey(p)) return false;
             var pp = MakePuppet(spot, from);
             if (pp == null) return false;
-            float rt = now - _clockOffset - InterpDelay;
+            float rt = now - InterpDelay;
             pp.Samples.Add((rt, from));
             pp.Samples.Add((rt + GlideTime * 0.5f, Vector3.Lerp(from, to, 0.8f)));
             pp.Samples.Add((rt + GlideTime, to));
@@ -187,6 +186,13 @@ namespace PlayroomsCoop
             if (now - _lastCapLog < 10f) return;
             _lastCapLog = now;
             Plugin.Log.LogInfo($"[Balls] moving ball limit reached ({MaxMoving})");
+        }
+
+        private static bool OtherCloserH(Vector3 at, float myDist)
+        {
+            foreach (var pr in Net.Peers.Values)
+                if (pr.InWorld && pr.Head.HasValue && HDist(at, pr.Head.Value) < myDist) return true;
+            return false;
         }
 
         private static void ApplyLive(string roomId, int idx, Vector3 pos, float sentAt)
@@ -248,7 +254,7 @@ namespace PlayroomsCoop
         private static void TickPuppets(float now, float dt)
         {
             if (_puppets.Count == 0) return;
-            float renderT = now - _clockOffset - InterpDelay;
+            float renderT = now - InterpDelay;
             _puppetKeys.Clear();
             _puppetKeys.AddRange(_puppets.Keys);
             foreach (var p in _puppetKeys)
@@ -264,7 +270,6 @@ namespace PlayroomsCoop
                 }
                 var pos = Sample(pp.Samples, renderT);
                 Vector3 d = pos - pp.LastShown;
-                // a ball that has stopped needs no transform write or redraw
                 if (d.sqrMagnitude > 0.0000001f || !pp.Shown)
                 {
                     t.position = pos;

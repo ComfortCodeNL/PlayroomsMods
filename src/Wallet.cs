@@ -121,12 +121,13 @@ namespace PlayroomsCoop
             }
         }
 
-        private static uint _walletSeq, _walletAck;
+        private static uint _walletSeq;
+        private static readonly Dictionary<ulong, uint> _acks = new Dictionary<ulong, uint>();
         private static readonly List<(uint seq, string id, int amount)> _unacked = new List<(uint, string, int)>();
         private static bool _walletDirty;
         private static float _nextWalletState;
 
-        private static void WalletReset() { _walletSeq = 0; _walletAck = 0; _unacked.Clear(); _walletDirty = true; _nextWalletState = 0f; }
+        private static void WalletReset() { _walletSeq = 0; _acks.Clear(); _unacked.Clear(); _walletDirty = true; _nextWalletState = 0f; }
 
         private static void WalletTick(object ss, float now)
         {
@@ -138,9 +139,12 @@ namespace PlayroomsCoop
                 _lastBalances = bal;
                 if (now < _nextWalletState || (!_walletDirty && now < _nextWalletState + 0.75f)) return;
                 _nextWalletState = now + 0.25f; _walletDirty = false;
-                var w = Protocol.W.Begin(Msg.WalletState); w.U32(_walletAck); w.U16((ushort)bal.Count);
+                var w = Protocol.W.Begin(Msg.WalletState);
+                w.U8((byte)_acks.Count);
+                foreach (var a in _acks) { w.U64(a.Key); w.U32(a.Value); }
+                w.U16((ushort)bal.Count);
                 foreach (var kv in bal) { w.Str(kv.Key); w.I32(kv.Value); }
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendAll(SteamNet.SendReliable);
                 return;
             }
             SendOwnChanges(bal);
@@ -155,16 +159,17 @@ namespace PlayroomsCoop
                 if (d == 0) continue;
                 _unacked.Add((++_walletSeq, kv.Key, d));
                 var w = Protocol.W.Begin(Msg.WalletDelta); w.Str(kv.Key); w.I32(d); w.U32(_walletSeq);
-                w.SendTo(_peer, SteamNet.SendReliable);
+                w.SendHost(SteamNet.SendReliable);
             }
             _lastBalances = bal;
         }
 
-        private static void OnWalletDelta(object ss, string id, int d, uint seq)
+        private static void OnWalletDelta(object ss, ulong from, string id, int d, uint seq)
         {
-            if (!_isHost || (int)(seq - _walletAck) <= 0) return;
-            if (d > 100000000 || d < -100000000) { Plugin.Log.LogWarning($"[Wallet] ignored an impossible change ({d})"); _walletAck = seq; return; }
-            _walletAck = seq;
+            _acks.TryGetValue(from, out uint ack);
+            if (!_isHost || (int)(seq - ack) <= 0) return;
+            if (d > 100000000 || d < -100000000) { Plugin.Log.LogWarning($"[Wallet] ignored an impossible change ({d})"); _acks[from] = seq; return; }
+            _acks[from] = seq;
             Applying = true;
             try { if (d > 0) Grant(ss, id, d, SourceOther); else Spend(ss, id, -d); }
             finally { Applying = false; }

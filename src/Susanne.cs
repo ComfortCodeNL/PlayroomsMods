@@ -8,12 +8,10 @@ namespace PlayroomsCoop
     {
         public static Feature Susanne;
 
-        private enum SusOwner { None, Me, Peer }
-
         private sealed class Sus
         {
             public byte Kind; public string TypeName; public object Ref;
-            public SusOwner Owner;
+            public ulong Owner;
             public bool Frozen, OrigRootMotion;
             public float IdleSince = -1f, LastState, NextSend;
             public bool HasPose; public Vector3 Pos; public Quaternion Rot;
@@ -40,7 +38,7 @@ namespace PlayroomsCoop
             foreach (var s in _sus)
             {
                 if (s.Frozen && Alive(s.Ref)) Susanne.Try(() => Unfreeze(s, s.Phase, s.Visible, s.Done), "release Susanne");
-                s.Owner = SusOwner.None; s.Frozen = false; s.HasPose = false; s.IdleSince = -1f;
+                s.Owner = 0; s.Frozen = false; s.HasPose = false; s.IdleSince = -1f;
                 s.Steps = s.Warn = s.Rush = s.Scream = -1;
             }
         }
@@ -53,7 +51,7 @@ namespace PlayroomsCoop
                 foreach (var s in _sus)
                 {
                     if (Alive(s.Ref)) continue;
-                    s.Ref = null; s.Owner = SusOwner.None; s.Frozen = false;
+                    s.Ref = null; s.Owner = 0; s.Frozen = false;
                     var t = R.T(s.TypeName);
                     if (t != null) foreach (var o in R.FindAll(t)) { s.Ref = o; break; }
                 }
@@ -61,24 +59,21 @@ namespace PlayroomsCoop
             foreach (var s in _sus)
             {
                 if (!Alive(s.Ref)) continue;
-                switch (s.Owner)
+                if (s.Owner == 0)
                 {
-                    case SusOwner.None:
-                        if (!SusIdle(s, SusPhase(s)))
-                        {
-                            s.Owner = SusOwner.Me; s.IdleSince = -1f;
-                            var w = Protocol.W.Begin(Msg.SusanneClaim); w.U8(s.Kind);
-                            w.SendTo(_peer, SteamNet.SendReliable);
-                            Plugin.Log.LogInfo($"[Susanne] {Name(s)} is after you");
-                        }
-                        break;
-                    case SusOwner.Me:
-                        OwnerTick(s, now);
-                        break;
-                    case SusOwner.Peer:
-                        if (now - s.LastState > 10f) { Unfreeze(s, s.Phase, false, s.Done); s.Owner = SusOwner.None; break; }
-                        MirrorTick(s, dt);
-                        break;
+                    if (!SusIdle(s, SusPhase(s)))
+                    {
+                        s.Owner = Net.Me; s.IdleSince = -1f;
+                        var w = Protocol.W.Begin(Msg.SusanneClaim); w.U8(s.Kind);
+                        w.SendAll(SteamNet.SendReliable);
+                        Plugin.Log.LogInfo($"[Susanne] {Name(s)} is after you");
+                    }
+                }
+                else if (s.Owner == Net.Me) OwnerTick(s, now);
+                else
+                {
+                    if (now - s.LastState > 10f || Net.Get(s.Owner) == null) { Unfreeze(s, s.Phase, false, s.Done); s.Owner = 0; continue; }
+                    MirrorTick(s, dt);
                 }
             }
         }
@@ -93,10 +88,10 @@ namespace PlayroomsCoop
                 if (s.IdleSince < 0f) s.IdleSince = now;
                 else if (now - s.IdleSince > 1f)
                 {
-                    s.Owner = SusOwner.None;
+                    s.Owner = 0;
                     var w = Protocol.W.Begin(Msg.SusanneRelease);
                     w.U8(s.Kind); w.U8((byte)phase); w.U8(SusVisible(s) ? (byte)1 : (byte)0); w.U8(SusDone(s) ? (byte)1 : (byte)0);
-                    w.SendTo(_peer, SteamNet.SendReliable);
+                    w.SendAll(SteamNet.SendReliable);
                     Plugin.Log.LogInfo($"[Susanne] {Name(s)} is back in hiding");
                     return;
                 }
@@ -129,7 +124,7 @@ namespace PlayroomsCoop
                 st.I32(R.Get<int>(s.Ref, "_steps")); st.I32(R.Get<int>(s.Ref, "_lastWarn"));
                 st.I32(R.Get<int>(s.Ref, "_lastRush")); st.I32(R.Get<int>(s.Ref, "_lastScream"));
             }
-            st.SendTo(_peer, SteamNet.SendUnreliable);
+            st.SendAll(SteamNet.SendUnreliable);
         }
 
         private static int RushHash(Sus s)
@@ -158,29 +153,34 @@ namespace PlayroomsCoop
             var s = _sus[kind];
             if (!Alive(s.Ref)) return;
             float now = Time.realtimeSinceStartup;
+            ulong from = Net.Sender;
             switch (type)
             {
                 case Msg.SusanneClaim:
-                    if (s.Owner == SusOwner.Me && _isHost) return;
-                    if (s.Owner != SusOwner.Peer)
+                    if (s.Owner != 0 && s.Owner != from && Net.SlotOf(s.Owner) < Net.SlotOf(from))
+                    {
+                        if (s.Owner == Net.Me) { var w = Protocol.W.Begin(Msg.SusanneClaim); w.U8(s.Kind); w.SendAll(SteamNet.SendReliable); }
+                        return;
+                    }
+                    if (s.Owner != from)
                     {
                         Freeze(s);
-                        s.Owner = SusOwner.Peer; s.LastState = now; s.HasPose = false;
+                        s.Owner = from; s.LastState = now; s.HasPose = false;
                         s.Steps = s.Warn = s.Rush = s.Scream = -1;
-                        Plugin.Log.LogInfo($"[Susanne] {Name(s)} is after your partner");
+                        Plugin.Log.LogInfo($"[Susanne] {Name(s)} is after {Net.NameOf(from)}");
                     }
                     break;
                 case Msg.SusanneRelease:
                 {
                     int phase = r.U8(); bool vis = r.U8() == 1, done = r.U8() == 1;
-                    if (s.Owner != SusOwner.Peer) return;
+                    if (s.Owner != from) return;
                     Unfreeze(s, phase, vis, done);
-                    s.Owner = SusOwner.None;
+                    s.Owner = 0;
                     break;
                 }
                 case Msg.SusanneState:
                 {
-                    if (s.Owner != SusOwner.Peer) return;
+                    if (s.Owner != from) return;
                     s.Phase = r.U8(); s.Visible = r.U8() == 1; s.Done = r.U8() == 1;
                     s.Pos = new Vector3(r.F32(), r.F32(), r.F32());
                     var q = default(Quaternion); q.x = r.F32(); q.y = r.F32(); q.z = r.F32(); q.w = r.F32(); s.Rot = q;

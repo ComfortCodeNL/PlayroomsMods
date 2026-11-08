@@ -16,9 +16,6 @@ namespace PlayroomsCoop
         public static Feature Balls, Pits, Entity, Clock, Doors, Scares;
 
         private static bool _connected, _isHost;
-        private static ulong _peer;
-        public static Vector3? RemoteHead;
-        public static float RemoteEyeHeight = 1.6f;
         public static Vector3? LocalHead;
 
         private static bool _applying;
@@ -49,7 +46,6 @@ namespace PlayroomsCoop
             public readonly List<(float t, Vector3 p)> Samples = new List<(float, Vector3)>();
         }
         private const float InterpDelay = 0.1f;
-        private static float _clockOffset; private static bool _hasClockOffset;
         private static readonly Dictionary<IntPtr, float> _recentPuppet = new Dictionary<IntPtr, float>();
         private static readonly List<object> _disabledVents = new List<object>();
         private static readonly List<Vector3> _ventIntakes = new List<Vector3>();
@@ -66,7 +62,7 @@ namespace PlayroomsCoop
         private static readonly HashSet<string> _warnedRooms = new HashSet<string>();
 
         private static object _enemy;
-        private static float _lastEnemySearch = -99f, _nextEnemySend, _caughtCooldownUntil;
+        private static float _lastEnemySearch = -99f, _nextEnemySend;
         private static object _hostPlayerTransform;
         private static GameObject _proxy;
         private static bool _targetingProxy;
@@ -98,10 +94,10 @@ namespace PlayroomsCoop
             Shared.Init();
         }
 
-        public static void OnConnected(ulong peer, bool isHost)
+        public static void OnConnected(bool isHost)
         {
             Shared.NewWorld();
-            _connected = true; _peer = peer; _isHost = isHost;
+            _connected = true; _isHost = isHost;
             _snapshotSentFor = IntPtr.Zero;
             _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear(); _warnedRooms.Clear();
             _pitLast.Clear(); _pitTarget.Clear(); _pitPending.Clear();
@@ -113,17 +109,16 @@ namespace PlayroomsCoop
             foreach (var pp in _puppets.Values) ReleasePuppet(pp);
             _puppets.Clear();
             _enemyNet = default;
-            Upgrades.OnConnected(peer, isHost);
-            Unlocks.OnConnected(peer, isHost);
-            Boards.OnConnected(peer, isHost);
-            Props.OnConnected(peer, isHost);
-            Shared.OnConnected(peer, isHost);
+            Upgrades.OnConnected(isHost);
+            Unlocks.OnConnected(isHost);
+            Boards.OnConnected(isHost);
+            Props.OnConnected(isHost);
+            Shared.OnConnected(isHost);
         }
 
         public static void OnDisconnected()
         {
-            _connected = false; _peer = 0; _pendDay = -1; _bedCheckAt = -1f; _keptPairs.Clear();
-            RemoteHead = null;
+            _connected = false; _pendDay = -1; _bedCheckAt = -1f; _keptPairs.Clear();
             Entity.Try(RestoreEnemy, "restore entity");
             if (_proxy != null) { UnityEngine.Object.Destroy(_proxy); _proxy = null; }
             _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear();
@@ -134,6 +129,13 @@ namespace PlayroomsCoop
             Boards.OnDisconnected();
             Props.OnDisconnected();
             Shared.OnDisconnected();
+        }
+
+        public static void OnPeerLeft(ulong id)
+        {
+            if (_remoteBrooms.TryGetValue(id, out var rb)) { if (rb.Proxy != null) UnityEngine.Object.Destroy(rb.Proxy); _remoteBrooms.Remove(id); }
+            _catchCool.Remove(id); _sees.Remove(id);
+            Plugin.Log.LogInfo($"[World] {Net.NameOf(id)} left: their robots, Susanne and entity target go back to the others");
         }
 
         private static void T(string name, Action a)
@@ -164,7 +166,7 @@ namespace PlayroomsCoop
             T("pickups", () => ProcessPendingTakes(1500));
             if (now >= _nextPitPoll) { _nextPitPoll = now + 0.25f; T("pits", () => Pits.Try(PollPits, "poll pits")); }
             if (now >= _nextMovePoll) { _nextMovePoll = now + 0.05f; T("moving balls", () => Balls.Try(() => PollMovingBalls(now), "poll moving balls")); }
-            T("puppet balls", () => Balls.Try(() => TickPuppets(now, dt), "move partner's balls"));
+            T("puppet balls", () => Balls.Try(() => TickPuppets(now, dt), "move other players' balls"));
             if (now >= _nextVentScan) { _nextVentScan = now + 3f; T("vents", () => Balls.Try(ScanVents, "vents")); }
             T("pit drops", () => Pits.Try(() => DeliverPending(40), "deliver to pits"));
             T("broom", () => Broom.Try(() => BroomCapsTick(now), "broom caps"));
@@ -230,11 +232,13 @@ namespace PlayroomsCoop
                 var p = _proxy.transform.position;
                 float dx = t.x - p.x, dz = t.z - p.z;
                 float catchDist = R.Get<float>(controller, "catchDistance");
-                if (dx * dx + dz * dz <= catchDist * catchDist && Time.realtimeSinceStartup > _caughtCooldownUntil)
+                if (dx * dx + dz * dz <= catchDist * catchDist && _targetPeer != 0)
                 {
-                    _caughtCooldownUntil = Time.realtimeSinceStartup + 15f;
-                    Protocol.SendSimple(_peer, Msg.EnemyCaught, SteamNet.SendReliable);
-                    Plugin.Log.LogInfo("Entity caught Player 2");
+                    ulong caught = _targetPeer;
+                    _catchCool[caught] = Time.realtimeSinceStartup + 15f;
+                    Net.SendTo(caught, Protocol.W.Begin(Msg.EnemyCaught), SteamNet.SendReliable);
+                    Plugin.Log.LogInfo($"Entity caught {Net.NameOf(caught)}");
+                    _targetPeer = 0;
                     SetEnemyTarget(controller, _hostPlayerTransform, false);
                 }
             }
@@ -342,8 +346,20 @@ namespace PlayroomsCoop
             return map;
         }
 
+        // guests can message each other, so only take these from the host
+        private static bool HostOnly(Msg type) =>
+            type == Msg.WalletState || type == Msg.DayTime || type == Msg.Enemy || type == Msg.EnemyCaught ||
+            type == Msg.EnemyNotice || type == Msg.ObjOwner;
+
+        private static readonly HashSet<ulong> _warnedHostOnly = new HashSet<ulong>();
+
         public static void Handle(Msg type, byte[] buf, int len)
         {
+            if (HostOnly(type) && (_isHost || Net.Sender != Net.HostId))
+            {
+                if (_warnedHostOnly.Add(Net.Sender)) Plugin.Log.LogWarning($"[Net] ignored a host-only message ({type}) from {SteamNet.Plain(Net.NameOf(Net.Sender))}, who isn't the host");
+                return;
+            }
             switch (type)
             {
                 case Msg.BallsTaken:
@@ -359,10 +375,7 @@ namespace PlayroomsCoop
                     if (!Balls.Enabled) return;
                     var r = new Reader(buf, len, Protocol.HeaderSize);
                     float sentAt = r.F32();
-                    float now = Time.realtimeSinceStartup;
-                    float off = now - sentAt;
-                    if (!_hasClockOffset || off < _clockOffset) { _clockOffset = off; _hasClockOffset = true; }
-                    else _clockOffset += (off - _clockOffset) * 0.01f;
+                    sentAt += Net.Offset(Net.Sender, sentAt);
                     int rc = r.U8();
                     var rooms = new string[rc];
                     for (int i = 0; i < rc; i++) rooms[i] = r.Str();
@@ -395,24 +408,26 @@ namespace PlayroomsCoop
                 case Msg.SusanneClaim:
                 case Msg.SusanneRelease:
                 case Msg.SusanneState:
-                    Susanne.Try(() => OnSusanneMessage(type, buf, len), "partner's Susanne");
+                    Susanne.Try(() => OnSusanneMessage(type, buf, len), "other player's Susanne");
                     break;
                 case Msg.PlayerDied:
                 case Msg.PlayerRespawned:
                 case Msg.SafeState:
-                    Respawn.Try(() => OnRespawnMessage(type, buf, len), "partner respawn");
+                    Respawn.Try(() => OnRespawnMessage(type, buf, len), "other player respawn");
                     break;
                 case Msg.VentFeed:
                     if (Balls.Enabled) OnVentFeed(buf, len);
                     break;
                 case Msg.BroomSweep:
-                    if (Balls.Enabled) Broom.Try(() => OnSweepMessage(buf, len), "partner sweep");
+                    if (Balls.Enabled) Broom.Try(() => OnSweepMessage(buf, len), "other player sweep");
                     break;
                 case Msg.BroomCaps:
                 {
                     var r = new Reader(buf, len, Protocol.HeaderSize);
-                    _peerBroom = r.U8() == 1 && Broom.Enabled;
-                    Plugin.Log.LogInfo(_peerBroom ? "[Broom] partner replays your broom" : "[Broom] partner can't replay your broom; sending live ball positions");
+                    var pr = Net.Get(Net.Sender);
+                    if (pr == null) break;
+                    pr.BroomReplay = r.U8() == 1 && Broom.Enabled;
+                    Plugin.Log.LogInfo(pr.BroomReplay ? $"[Broom] {pr.Name} replays your broom" : $"[Broom] {pr.Name} can't replay your broom; sending live ball positions");
                     break;
                 }
                 case Msg.PitAmount:
@@ -453,6 +468,8 @@ namespace PlayroomsCoop
                 case Msg.ObjFlag:
                 case Msg.ObjDelta:
                 case Msg.RobotSay:
+                case Msg.ObjOwner:
+                case Msg.ObjFinal:
                     Shared.Handle(type, buf, len);
                     break;
                 case Msg.StatSet:
