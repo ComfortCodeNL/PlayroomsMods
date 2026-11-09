@@ -2,7 +2,7 @@
 
 Two mods for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/), hosted together for now:
 
-- **Playrooms Co-op 1.1.1**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
+- **Playrooms Co-op 1.1.2**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
 - **Playrooms New Game+ 1.2.3**: replay the game after the end credits with a head start, in Simple, SpeedRun or Balance Patch mode, plus Spooky, Tokens and a Starter kit.
 
 Each mod works on its own, and they work together: New Game+ runs can be played in co-op. Grab the bundle to get both, or just the one you want.
@@ -14,7 +14,7 @@ On the [Releases](../../releases) page, each release has these zips. Each one in
 | Zip | Contains |
 |---|---|
 | `PlayroomsCoopNGPlus_Bundle_..._WithBepInEx.zip` | Both mods + BepInEx (recommended) |
-| `PlayroomsCoop_1.1.1_WithBepInEx.zip` | Co-op + BepInEx |
+| `PlayroomsCoop_1.1.2_WithBepInEx.zip` | Co-op + BepInEx |
 | `PlayroomsNewGamePlus_1.2.3_WithBepInEx.zip` | New Game+ + BepInEx |
 
 All of them include the same BepInEx and patcher, so installing more than one is fine.
@@ -30,7 +30,8 @@ One player hosts and up to three friends join through an in-game menu (F8). Ever
 - Robots and vacuum devices (including the robots' voice lines)
 - You can even write on the whiteboard together. Maybe a game of tic-tac-toe?
 - If you're caught while someone else is safe, you wake up in the clean room instead of losing the run. If nobody is safe, the run ends for everyone
-- Unstuck (pause menu) moves you next to the nearest player, or to the clean room if that isn't possible, with a 10 second cooldown
+- Unstuck (Help menu) moves you next to the nearest player, or to the nearest free spot if that isn't possible, with a 10 second cooldown
+- Reset Room Balls and Bring Devices Home (Help menu) work for everyone. Restart Day is off in co-op, since it would put players in different days
 - Balls stuck out of reach are moved back into play (this also works in solo)
 - Opening a hallway door no longer closes the other open ones, so you can work in different rooms
 - Waiting room doors stay open while anyone is using them
@@ -118,10 +119,10 @@ Once neither mod is left, also delete `BepInEx\patchers\PlayroomsPatcher`. Your 
 
 ## Troubleshooting
 
-The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.1 loaded` or `Playrooms New Game Plus 1.2.3 loaded`, that mod is running.
+The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.2 loaded` or `Playrooms New Game Plus 1.2.3 loaded`, that mod is running.
 
 - **No log file, or the game starts like normal with no BepInEx:** BepInEx isn't loading. Check that `winhttp.dll` is right next to `Playrooms.exe` and not in a subfolder (see step 3). Some antivirus programs quarantine `winhttp.dll` because it loads mods. If yours did, restore it and add an exception. On Steam Deck or Linux, check the launch option above.
-- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 3, not in an extra folder such as `PlayroomsCoop_1.1.1\BepInEx`.
+- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 3, not in an extra folder such as `PlayroomsCoop_1.1.2\BepInEx`.
 - **Nothing happens when pressing F8:** click into the game window first, and check the log for the "loaded" line.
 - **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same mod versions.
 - **No New Game+ in the menu:** only saves that reached the end credits count.

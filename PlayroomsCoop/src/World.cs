@@ -201,6 +201,7 @@ namespace PlayroomsCoop
             R.Patch(R.T("TwoPixels.Ball.BallVent"), "ConsumeIntoPit", 1, typeof(Hooks), nameof(Hooks.VentConsumePrefix), null);
             R.Patch(R.T("TwoPixels.Enemy.EnemyService"), "TriggerDeathFlow", 2, typeof(Hooks), nameof(Hooks.DeathPrefix), nameof(Hooks.DeathPostfix));
             UnstuckHooks();
+            HelpMenuHooks();
             Shared.Hooks();
             R.Patch(R.T("TwoPixels.Interactables.PurchaseInteractable"), "EquipPurchasedTool", 0, typeof(Hooks), nameof(Hooks.EquipToolPrefix), null);
             R.Patch(R.T("TwoPixels.Room.RoomService"), "OnHubDoorStateChanged", 1, typeof(Hooks), nameof(Hooks.HubDoorPrefix), nameof(Hooks.HubDoorPostfix));
@@ -472,6 +473,9 @@ namespace PlayroomsCoop
                 case Msg.ObjFinal:
                     Shared.Handle(type, buf, len);
                     break;
+                case Msg.DevicesHome:
+                    OnDevicesHome();
+                    break;
                 case Msg.StatSet:
                     Unlocks.Handle(buf, len);
                     break;
@@ -546,6 +550,10 @@ namespace PlayroomsCoop
         public static bool RobotSayPrefix(object __instance, ref bool __result) => Shared.OnSayPrefix(__instance, ref __result);
         public static void RobotSayPostfix(object __instance, object clip, bool interrupt, bool __result) => Shared.OnSaid(__instance, clip, interrupt, __result);
         public static bool UnstuckPrefix(object __instance) => World.OnUnstuckButton(__instance);
+        public static void ResetBallsPrefix(object __0, out List<(int idx, Vector3 pos)> __state) => __state = World.BallSpotsBefore(__0);
+        public static void ResetBallsPostfix(object __0, List<(int idx, Vector3 pos)> __state) => World.SendResetBalls(__0, __state);
+        public static void DevicesHomePostfix(int __result) => World.SendDevicesHome(__result);
+        public static bool RestartDayPrefix() => World.AllowRestartDay();
         public static void UnstuckCooldownPostfix(ref float __result) => World.OnUnstuckCooldown(ref __result);
     }
 }

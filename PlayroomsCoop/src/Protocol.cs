@@ -63,6 +63,7 @@ namespace PlayroomsCoop
         ObjFinal = 54,
         ModCounterTake = 55,
         ModCounterResult = 56,
+        DevicesHome = 57,
     }
 
     internal struct PoseState
@@ -142,7 +143,7 @@ namespace PlayroomsCoop
     internal static class Protocol
     {
         public const uint Magic = 0x31435250;
-        public const byte Version = 40;
+        public const byte Version = 41;
         public const int HeaderSize = 6;
         public const int MaxPacket = 1 << 20;
 

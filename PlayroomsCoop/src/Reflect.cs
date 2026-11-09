@@ -268,7 +268,7 @@ namespace PlayroomsCoop
                     _harmonyMethodCtor = hmType.GetConstructor(new[] { typeof(MethodInfo) });
                 }
 
-                var original = target.GetMethods(Inst | BindingFlags.DeclaredOnly)
+                var original = target.GetMethods(Inst | BindingFlags.Static | BindingFlags.DeclaredOnly)
                     .FirstOrDefault(m => m.Name == method && m.GetParameters().Length == paramCount);
                 if (original == null) { Plugin.Log.LogWarning($"Patch skipped: {target.Name}.{method} not found"); return false; }
 

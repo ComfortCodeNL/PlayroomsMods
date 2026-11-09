@@ -18,7 +18,9 @@ namespace PlayroomsCoop
 
         private static void UnstuckHooks()
         {
-            R.Patch(R.T("TwoPixels.Popups.PauseMenuPopup.PauseMenuPopup"), "OnClickUnstuckButton", 0, typeof(Hooks), nameof(Hooks.UnstuckPrefix), null);
+            var help = R.T("TwoPixels.Popups.HelpPopup.HelpPopup");
+            if (help != null) R.Patch(help, "OnClickUnstuck", 0, typeof(Hooks), nameof(Hooks.UnstuckPrefix), null);
+            else R.Patch(R.T("TwoPixels.Popups.PauseMenuPopup.PauseMenuPopup"), "OnClickUnstuckButton", 0, typeof(Hooks), nameof(Hooks.UnstuckPrefix), null);
             R.Patch(R.T("TwoPixels.Player.PlayerUnstuck"), "get_CooldownRemaining", 0, typeof(Hooks), null, nameof(Hooks.UnstuckCooldownPostfix));
         }
 
@@ -37,7 +39,7 @@ namespace PlayroomsCoop
             if (unstuck == null) return true;
             int res = ResUnavailable;
             if (!Unstuck.Try(() => res = DoUnstuck(unstuck), "unstuck")) return true;
-            try { R.Call(popup, "Close"); } catch { }
+            try { R.Call(popup, R.HasMethod(popup, "CloseWithPauseMenu", 0) ? "CloseWithPauseMenu" : "Close"); } catch { }
             try
             {
                 var show = unstuck.GetType().GetMethod("ShowResult");
@@ -52,7 +54,7 @@ namespace PlayroomsCoop
             if (!Convert.ToBoolean(R.Call(unstuck, "Resolve"))) return ResUnavailable;
             if (Convert.ToBoolean(R.Call(unstuck, "IsUnavailable"))) return ResUnavailable;
             if (UnstuckRemaining() > 0f) return ResCooldown;
-            if (Convert.ToBoolean(R.Call(unstuck, "IsHunted"))) return ResHunted;
+            if (IsHunted(unstuck)) return ResHunted;
 
             var body = R.Get(unstuck, "_body");
             if (body == null) return ResUnavailable;
@@ -68,6 +70,8 @@ namespace PlayroomsCoop
                 return ResFreed;
             }
 
+            if (R.HasMethod(unstuck, "TryUnstuck", 0)) return Convert.ToInt32(R.Call(unstuck, "TryUnstuck"));
+
             foreach (var c in R.FindAll(R.T("TwoPixels.Player.PlayerBehaviourController")))
             {
                 R.Call(c, "ResetToStartPosition");
@@ -77,6 +81,12 @@ namespace PlayroomsCoop
                 return ResFreed;
             }
             return ResUnavailable;
+        }
+
+        private static bool IsHunted(object unstuck)
+        {
+            var t = R.T("TwoPixels.Player.PlayerUnstuck");
+            return Convert.ToBoolean(t?.GetMethod("IsPlayerHunted") != null ? R.CallStatic(t, "IsPlayerHunted") : R.Call(unstuck, "IsHunted"));
         }
 
         private static bool TryPlayerSpot(object unstuck, Vector3 myFeet, out Vector3 spot, out string who)
