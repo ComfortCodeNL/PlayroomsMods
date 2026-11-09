@@ -146,3 +146,5 @@ These mods are not endorsed by Two Pixels UG, the developers of Playrooms. They 
 ## Shout outs
 
 Thanks to my wife, who loves these cozy clean-em-ups.
+
+<a href="https://www.buymeacoffee.com/lyrawolf" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
