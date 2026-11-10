@@ -11,7 +11,6 @@ using Il2CppInterop.Runtime.Runtime;
 
 namespace PlayroomsPatcher
 {
-    // Builds metadata-only assemblies from the running il2cpp runtime, in the shape Il2CppInterop's generator expects
     internal sealed unsafe class Dumper
     {
         private readonly ManualLogSource _log;
@@ -47,7 +46,7 @@ namespace PlayroomsPatcher
             images.Remove(corlibImage);
             images.Insert(0, corlibImage);
 
-            // assemblies (corlib first, everything else references it)
+            // Assemblies
             var modules = new Dictionary<IntPtr, ModuleDefinition>();
             AssemblyDefinition corlib = null;
             var resolver = new MemoryResolver();
@@ -66,7 +65,7 @@ namespace PlayroomsPatcher
                 result.Add(asm);
             }
 
-            // types, then nesting
+            // Types
             foreach (var image in images)
             {
                 var module = modules[image];
@@ -90,7 +89,7 @@ namespace PlayroomsPatcher
             }
             foreach (var m in modules.Values) _injected[m] = Inject(m, corlib);
 
-            // generic parameters first (signatures below refer to them by position)
+            // Generic parameters
             foreach (var (klass, td) in _order) Guard(td, () => TypeGenerics(klass, td));
             foreach (var (klass, td) in _order) Guard(td, () => Hierarchy(klass, td));
             foreach (var (klass, td) in _order) Guard(td, () => Members(klass, td));
@@ -109,7 +108,7 @@ namespace PlayroomsPatcher
             if (Problems.Count < 400) Problems.Add(text);
         }
 
-        // ------------------------------------------------------------ hierarchy
+        // Hierarchy
 
         private void TypeGenerics(IntPtr klass, TypeDefinition td)
         {
@@ -138,7 +137,7 @@ namespace PlayroomsPatcher
                     if (c != IntPtr.Zero) parameters[i].Constraints.Add(new GenericParameterConstraint(DefOrRef(Sig(c, module))));
         }
 
-        // ------------------------------------------------------------ members
+        // Members
 
         private void Members(IntPtr klass, TypeDefinition td)
         {
@@ -157,7 +156,7 @@ namespace PlayroomsPatcher
                     if ((attrs & FieldAttributes.Static) == 0)
                     {
                         int off = (int)IL2CPP.il2cpp_field_get_offset(f);
-                        if (valueType && off > 0) off -= 2 * IntPtr.Size; // offsets inside a struct, not a boxed object
+                        if (valueType && off > 0) off -= 2 * IntPtr.Size;
                         fd.CustomAttributes.Add(Attr(module, inj.FieldOffset, ("Offset", $"0x{off:X}")));
                     }
                     td.Fields.Add(fd);
@@ -272,7 +271,7 @@ namespace PlayroomsPatcher
             }
         }
 
-        // ------------------------------------------------------------ signatures
+        // Signatures
 
         private TypeSignature Sig(IntPtr type, ModuleDefinition module)
         {
@@ -362,7 +361,7 @@ namespace PlayroomsPatcher
         private static ITypeDefOrRef DefOrRef(TypeSignature sig) =>
             sig is TypeDefOrRefSignature tdr ? tdr.Type : sig.ToTypeDefOrRef();
 
-        // ------------------------------------------------------------ marker attributes
+        // Marker attributes
 
         private Injected Inject(ModuleDefinition module, AssemblyDefinition corlib)
         {
@@ -396,7 +395,6 @@ namespace PlayroomsPatcher
         [DllImport("kernel32", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandleW(string name);
     }
 
-    // Resolves references between the dumped assemblies, in memory
     internal sealed class MemoryResolver : IAssemblyResolver
     {
         private readonly Dictionary<string, AssemblyDefinition> _byName = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
@@ -408,7 +406,6 @@ namespace PlayroomsPatcher
         public void ClearCache() => _byName.Clear();
     }
 
-    // Section table of the loaded GameAssembly.dll (RVA to file offset)
     internal sealed unsafe class Pe
     {
         public readonly IntPtr Base;

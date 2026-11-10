@@ -99,7 +99,6 @@ internal static class Hooks
         if (mailId == "install_shop" || mailId == "install_skills") __result = true;
     }
 
-    // IsInstalled is folded into its callers, but they all end up here
     public static void MailArrivedPostfix(string mailId, ref bool __result)
     {
         if (__result || !NewGamePlus.IsNgWorld || !Plugin.InstallPrograms.Value) return;

@@ -14,7 +14,7 @@ internal static class Game
     public const string EndSequenceT = "TwoPixels.Ending.GameEndSequence";
     public const string PurchaseT = "TwoPixels.Interactables.PurchaseInteractable";
 
-    public const string CurrencyId = "balls";          // 1 ball = 1 penny
+    public const string CurrencyId = "balls";
     public const string CompletedStat = "game_completed";
     public const string PrologueStat = "prologue_done";
     public const string CollectablePrefix = "collectable_";

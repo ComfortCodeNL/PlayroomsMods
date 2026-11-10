@@ -107,7 +107,6 @@ internal static class Modal
 
     private static void ResumeGameUi()
     {
-        // input modules first, then event systems (same order as Co-op)
         for (int pass = 0; pass < 2; pass++)
         {
             foreach (var b in _paused)

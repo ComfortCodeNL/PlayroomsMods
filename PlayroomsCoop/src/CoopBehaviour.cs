@@ -156,6 +156,7 @@ namespace PlayroomsCoop
                 foreach (var f in _friends) SteamNet.Accept(f.Id);
                 if (_joinTarget != 0) SteamNet.Accept(_joinTarget);
                 foreach (var id in Net.Peers.Keys) SteamNet.Accept(id);
+                NetCheck.Tick(_friends);
             }
 
             if (_steamReadyAt < 0f) _steamReadyAt = now;

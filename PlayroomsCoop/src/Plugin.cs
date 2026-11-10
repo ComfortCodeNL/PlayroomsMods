@@ -12,7 +12,7 @@ namespace PlayroomsCoop
     {
         public const string Guid = "com.playroomscoop.mod";
         public const string Name = "Playrooms Co-op";
-        public const string Version = "1.1.2";
+        public const string Version = "1.1.3";
 
         internal static new ManualLogSource Log;
 
@@ -23,6 +23,7 @@ namespace PlayroomsCoop
         internal static ConfigEntry<float> HdrpGlowScale;
         internal static ConfigEntry<bool> ShowNames;
         internal static ConfigEntry<int> SendRate;
+        internal static ConfigEntry<bool> ForceSteamRelay;
         internal static ConfigEntry<float> EntitySenseRadius, AmbientScareMultiplier;
         internal static ConfigEntry<bool> SyncBalls, SyncPits, SyncEntity, SyncDayTime, SyncUpgrades, SyncObjects, SharedWallet, SyncDoors, KeepDoorsOpen, SyncUnlocks, SyncBoards, SyncProps, UseHostSave;
         internal static ConfigEntry<string> PitDropStyle;
@@ -43,6 +44,7 @@ namespace PlayroomsCoop
             HdrpGlowScale = Config.Bind("Avatars", "GlowBrightness", 1f, "Multiplier for the glow brightness. Raise it if the glow is invisible, lower it if avatars look blown out.");
             ShowNames = Config.Bind("Avatars", "ShowNames", true, "Show other players' names above their avatars.");
             SendRate = Config.Bind("Network", "SendRate", 20, "Position updates per second (10-60).");
+            ForceSteamRelay = Config.Bind("Network", "ForceSteamRelay", false, "Route every connection through Steam's relay servers, even on the same network. For testing what players in different houses get. Restart the game after changing.");
             SyncBalls = Config.Bind("World", "SyncBalls", true, "Balls picked up by one player disappear for everyone.");
             SyncPits = Config.Bind("World", "SyncPits", true, "Ball pit fill levels are shared.");
             SyncEntity = Config.Bind("World", "SyncEntity", true, "The host's entity hunts every player; the clients' copies follow it.");

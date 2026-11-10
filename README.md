@@ -2,7 +2,7 @@
 
 Two mods for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/), hosted together for now:
 
-- **Playrooms Co-op 1.1.2**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
+- **Playrooms Co-op 1.1.3**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
 - **Playrooms New Game+ 1.2.3**: replay the game after the end credits with a head start, in Simple, SpeedRun or Balance Patch mode, plus Spooky, Tokens and a Starter kit.
 
 Each mod works on its own, and they work together: New Game+ runs can be played in co-op. Grab the bundle to get both, or just the one you want.
@@ -14,7 +14,7 @@ On the [Releases](../../releases) page, each release has these zips. Each one in
 | Zip | Contains |
 |---|---|
 | `PlayroomsCoopNGPlus_Bundle_..._WithBepInEx.zip` | Both mods + BepInEx (recommended) |
-| `PlayroomsCoop_1.1.2_WithBepInEx.zip` | Co-op + BepInEx |
+| `PlayroomsCoop_1.1.3_WithBepInEx.zip` | Co-op + BepInEx |
 | `PlayroomsNewGamePlus_1.2.3_WithBepInEx.zip` | New Game+ + BepInEx |
 
 All of them include the same BepInEx and patcher, so installing more than one is fine.
@@ -119,11 +119,13 @@ Once neither mod is left, also delete `BepInEx\patchers\PlayroomsPatcher`. Your 
 
 ## Troubleshooting
 
-The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.2 loaded` or `Playrooms New Game Plus 1.2.3 loaded`, that mod is running.
+The log is at `BepInEx\LogOutput.log` in the game folder. If it contains `Playrooms Co-op 1.1.3 loaded` or `Playrooms New Game Plus 1.2.3 loaded`, that mod is running.
 
 - **No log file, or the game starts like normal with no BepInEx:** BepInEx isn't loading. Check that `winhttp.dll` is right next to `Playrooms.exe` and not in a subfolder (see step 3). Some antivirus programs quarantine `winhttp.dll` because it loads mods. If yours did, restore it and add an exception. On Steam Deck or Linux, check the launch option above.
-- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 3, not in an extra folder such as `PlayroomsCoop_1.1.2\BepInEx`.
+- **Log exists but a mod's "loaded" line is missing:** check that the mod files are in the places shown in step 3, not in an extra folder such as `PlayroomsCoop_1.1.3\BepInEx`.
 - **Nothing happens when pressing F8:** click into the game window first, and check the log for the "loaded" line.
+- **Your friend shows "no reply", "connecting..." or "can't connect":** Steam can't connect your games. On both PCs, allow Playrooms through Windows Firewall (Windows Security > Firewall & network protection > Allow an app through firewall) and any antivirus firewall, turn off VPNs, and restart Steam. School, work and dorm networks often block it.
+- **Your friend shows "no mod reply":** the connection works, but their game didn't answer. Check their install and their log for the "loaded" line.
 - **Your friend isn't listed in the F8 menu:** they must be on your Steam friends list, in-game in Playrooms, with the same mod versions.
 - **No New Game+ in the menu:** only saves that reached the end credits count.
 - **The first launch after a Playrooms update is slow:** this is normal. The patcher rebuilds its files whenever the game updates.

@@ -10,7 +10,6 @@ namespace PlayroomsCoop
         private static readonly Dictionary<string, string> _coupledDoor = new Dictionary<string, string>();
         private static readonly List<object> _keptPairs = new List<object>();
 
-        // the game keeps one portal pair open and closes the last one, which shuts doors other players are using
         private static void PortalHooks()
         {
             R.Patch(R.T(PortalT), "ClaimOpenPair", 0, typeof(Hooks), nameof(Hooks.ClaimOpenPairPrefix), null);

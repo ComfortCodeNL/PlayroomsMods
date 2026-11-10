@@ -31,7 +31,7 @@ internal static class Spooky
                 R.Set(d, "maxScaresPerDay", (int)Math.Ceiling(o.max * m));
                 R.Set(d, "dayMinutesPerScare", o.perScare / m);
                 R.Set(d, "cooldownAfterScare", o.cooldown / m);
-                try { R.Call(d, "ResetDay"); } catch { } // today's budget picks up the new numbers
+                try { R.Call(d, "ResetDay"); } catch { }
                 _boosted = ptr;
                 Plugin.Log.LogInfo((object)$"Spooky on: {o.min}-{o.max} scares a day become {Math.Ceiling(o.min * m)}-{Math.Ceiling(o.max * m)}");
             }

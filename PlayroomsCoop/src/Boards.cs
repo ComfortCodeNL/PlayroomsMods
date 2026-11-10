@@ -8,7 +8,7 @@ namespace PlayroomsCoop
     internal static class Boards
     {
         private const string BoardT = "TwoPixels.Whiteboard.Whiteboard";
-        private const int MaxPng = 480 * 1024; // Steam reliable limit is 512 KB
+        private const int MaxPng = 480 * 1024;
 
         public static Feature Feature;
         private static bool _connected, _isHost, _snapshotSent;
@@ -123,7 +123,7 @@ namespace PlayroomsCoop
         {
             var mi = board.GetType().GetMethod("ApplyPng");
             if (mi == null) throw new MissingMethodException(board.GetType().Name, "ApplyPng");
-            var arrType = mi.GetParameters()[0].ParameterType; // Il2CppStructArray<byte>
+            var arrType = mi.GetParameters()[0].ParameterType;
             object il2cppBytes = Activator.CreateInstance(arrType, new object[] { png });
             mi.Invoke(board, new[] { il2cppBytes });
             try { R.Call(board, "FlushTexture"); } catch { }

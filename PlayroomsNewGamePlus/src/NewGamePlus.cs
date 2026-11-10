@@ -207,7 +207,6 @@ internal static class NewGamePlus
         float now = Game.Now;
         Plugin.EnsureHooks(now);
 
-        // never leave the game's menus switched off if our ui stopped drawing
         if (Modal.Active && (now - Ui.LastDraw > 1f || !Ui.Feature.Enabled)) Modal.End();
 
         if (now >= _nextActiveCheck)
@@ -263,7 +262,7 @@ internal static class NewGamePlus
             Spooky = Game.Stat(RunOptions.SpookyStat) > 0,
             Tokens = Game.Stat(RunOptions.TokensStat) > 0,
         };
-        if (PendingHere) WorldOptions = _pending.Options; // host before the stats are written
+        if (PendingHere) WorldOptions = _pending.Options;
     }
 
     private static void Modes()
@@ -430,7 +429,6 @@ internal static class NewGamePlus
             Ui.Notify($"{RunOptions.Name(p.Options.Mode).ToUpperInvariant()} {p.Cycle}  -  slot {p.Slot + 1}{extras}{bonus}", 8f);
         }
 
-        // kit waits for the prologue so the intro plays normally
         if (Game.Stat(KitStat) == p.Cycle)
         {
             Finish();
@@ -450,7 +448,6 @@ internal static class NewGamePlus
 
     private static void GiveKit()
     {
-        // broom last so it ends up in hand
         for (; _kitIndex < Kit.Length; _kitIndex++)
         {
             var (stat, name) = Kit[_kitIndex];
@@ -475,7 +472,6 @@ internal static class NewGamePlus
             if (Game.Stat(stat) < count) Game.SetStat(stat, count);
         }
 
-        // several passes so prerequisite chains resolve in any order
         int bought = 0, wanted = p.Skills.Values.Sum();
         Gates.Replaying = true;
         UpgradeUnlock.DeferRebuild = true;
@@ -603,7 +599,7 @@ internal static class NewGamePlus
                 Skills = ParseCounts(kv.TryGetValue("skills", out var sk) ? sk : null),
                 Tools = ParseCounts(kv.TryGetValue("tools", out var tl) ? tl : null),
             };
-            if (!kv.ContainsKey("options")) _pending.Options.Kit = true; // waiting from 1.0.x: it promised the kit
+            if (!kv.ContainsKey("options")) _pending.Options.Kit = true;
             Plugin.Log.LogInfo((object)$"New Game+ {_pending.Cycle} setup is waiting for slot {_pending.Slot + 1}");
         }
         catch (Exception ex)

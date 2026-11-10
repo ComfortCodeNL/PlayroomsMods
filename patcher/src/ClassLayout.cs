@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 
 namespace PlayroomsPatcher
 {
-    // Il2CppClass field offsets for Unity 6000.6 (Playrooms), read off the game's own accessors
     internal static class ClassLayout
     {
         public const int Image = 0x00;
@@ -19,7 +18,7 @@ namespace PlayroomsPatcher
         public const int Klass = 0x78;
         public const int Fields = 0x80;
         public const int Methods = 0x88;
-        public const int InterfaceOffsets = 0x90; // merged with the implemented interfaces in 6000.6
+        public const int InterfaceOffsets = 0x90;
         public const int StaticFields = 0x98;
         public const int TypeHierarchy = 0xA8;
         public const int Events = 0xB0;
@@ -53,7 +52,6 @@ namespace PlayroomsPatcher
         [DllImport("kernel32", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandleW(string name);
         [DllImport("kernel32", CharSet = CharSet.Ansi)] private static extern IntPtr GetProcAddress(IntPtr module, string name);
 
-        // Check our offsets against what the game's exported accessors read. null = all good
         public static string Verify()
         {
             var ga = GetModuleHandleW("GameAssembly.dll");
@@ -80,7 +78,6 @@ namespace PlayroomsPatcher
         }
     }
 
-    // Reads the field offset a tiny accessor function uses (mov/lea/movzx from rcx, or a constant)
     internal static unsafe class Accessor
     {
         public static int ReadOffset(IntPtr fn)
@@ -88,14 +85,12 @@ namespace PlayroomsPatcher
             byte* p = (byte*)fn;
             for (int hop = 0; hop < 3; hop++)
             {
-                if (p[0] == 0xE9) { p = p + 5 + *(int*)(p + 1); continue; }                 // jmp rel32
-                if (p[0] == 0xFF && p[1] == 0x25) { p = *(byte**)(p + 6 + *(int*)(p + 2)); continue; } // jmp [rip+x]
+                if (p[0] == 0xE9) { p = p + 5 + *(int*)(p + 1); continue; }
+                if (p[0] == 0xFF && p[1] == 0x25) { p = *(byte**)(p + 6 + *(int*)(p + 2)); continue; }
                 break;
             }
             int i = 0;
-            // mov eax, imm32 ; ret
             if (p[0] == 0xB8 && p[5] == 0xC3) return *(int*)(p + 1);
-            // [rex.w] (8B | 8D) modrm ; [0f b6|b7] modrm
             if (p[i] == 0x48) i++;
             byte op = p[i];
             if (op == 0x0F && (p[i + 1] == 0xB6 || p[i + 1] == 0xB7)) { i += 2; return Disp(p, i); }
@@ -103,7 +98,6 @@ namespace PlayroomsPatcher
             return -1;
         }
 
-        // modrm with base rcx: [rcx], [rcx+disp8], [rcx+disp32]
         private static int Disp(byte* p, int i)
         {
             byte modrm = p[i];

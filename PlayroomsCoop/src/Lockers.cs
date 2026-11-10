@@ -32,7 +32,6 @@ namespace PlayroomsCoop
             }
         }
 
-        // SetOpen skips the Opened event, so only the opener's locker launches its balls
         private static void ApplyLocker(string key, bool open, float now)
         {
             if (!_lockers.TryGetValue(key, out var locker) || !Alive(locker))

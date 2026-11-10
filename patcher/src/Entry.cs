@@ -13,7 +13,6 @@ namespace PlayroomsPatcher
     {
         public const string Version = "1.0.0";
 
-        // runs before BepInEx loads the interop assemblies, so a fresh build is used straight away
         public Entry()
         {
             var force = Config.Bind("Interop", "ForceRegenerate", false, "Rebuild the interop assemblies on the next start. Turns itself off afterwards.");

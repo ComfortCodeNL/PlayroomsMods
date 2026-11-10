@@ -95,7 +95,7 @@ namespace PlayroomsCoop
         {
             var es3 = R.T("ES3") ?? throw new InvalidDataException("no Easy Save");
             var mi = es3.GetMethod("DecryptBytes") ?? throw new InvalidDataException("no DecryptBytes");
-            var arrType = mi.GetParameters()[0].ParameterType; // Il2CppStructArray<byte>
+            var arrType = mi.GetParameters()[0].ParameterType;
             var arr = Activator.CreateInstance(arrType, new object[] { data });
             var outArr = mi.Invoke(null, new[] { arr, (object)password }) as System.Collections.IEnumerable;
             if (outArr == null) throw new InvalidDataException("couldn't decrypt");

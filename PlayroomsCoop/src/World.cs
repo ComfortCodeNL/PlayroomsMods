@@ -347,7 +347,6 @@ namespace PlayroomsCoop
             return map;
         }
 
-        // guests can message each other, so only take these from the host
         private static bool HostOnly(Msg type) =>
             type == Msg.WalletState || type == Msg.DayTime || type == Msg.Enemy || type == Msg.EnemyCaught ||
             type == Msg.EnemyNotice || type == Msg.ObjOwner;

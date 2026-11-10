@@ -44,7 +44,6 @@ internal static class Tokens
                 Ui.Notify($"Token used on {what}. {Math.Max(0, Left)} left.");
                 return;
             }
-            // someone else took the last token first: this one is paid for normally
             var ss = Game.Skills();
             bool paid = price <= 0 || (ss != null && Convert.ToBoolean(R.Call(ss, "SpendCurrency", Game.CurrencyId, price, 0)));
             Ui.Notify(paid

@@ -41,7 +41,6 @@ namespace PlayroomsPatcher
             Directory.Exists(InteropDir) && Directory.EnumerateFiles(InteropDir, "*.dll").Any() &&
             File.Exists(StampPath) && File.ReadAllText(StampPath).Trim() == Stamp();
 
-        // Game binaries, this patcher and the generator: any change means a rebuild
         private static string Stamp()
         {
             using var md5 = MD5.Create();
@@ -88,7 +87,7 @@ namespace PlayroomsPatcher
                 Source = assemblies,
                 OutputDir = staging,
                 UnityBaseLibsDir = Directory.Exists(UnityLibsDir) && Directory.EnumerateFiles(UnityLibsDir, "*.dll").Any() ? UnityLibsDir : null,
-                GameAssemblyPath = GameAssembly, // lets the generator find the GC write barrier
+                GameAssemblyPath = GameAssembly,
                 NoXrefCache = true,
             };
             Il2CppInteropGenerator.Create(opts).AddLogger(new Forward(log)).AddInteropAssemblyGenerator().Run();
@@ -100,7 +99,6 @@ namespace PlayroomsPatcher
             log.LogMessage($"Interop assemblies ready ({total.Elapsed.TotalSeconds:F1}s)");
         }
 
-        // Unity's managed base libraries (BepInEx downloads them; ask it to if they're missing)
         private static void EnsureUnityLibs(ManualLogSource log)
         {
             if (Directory.Exists(UnityLibsDir) && Directory.EnumerateFiles(UnityLibsDir, "*.dll").Any()) return;
@@ -116,7 +114,6 @@ namespace PlayroomsPatcher
             }
         }
 
-        // Replace the old interop files; loaded ones can't be deleted on Windows, so those get renamed
         private static void SwapIn(ManualLogSource log, string staging)
         {
             Directory.CreateDirectory(InteropDir);
@@ -146,7 +143,6 @@ namespace PlayroomsPatcher
             catch { }
         }
 
-        // So BepInEx doesn't retry its own (failing) generation on every start
         private static void WriteBepInExHash(ManualLogSource log)
         {
             try
@@ -180,7 +176,6 @@ namespace PlayroomsPatcher
             log.LogInfo("Dummy assemblies written to " + dir);
         }
 
-        // Generator log lines into the BepInEx log
         private sealed class Forward : ILogger
         {
             private readonly ManualLogSource _log;

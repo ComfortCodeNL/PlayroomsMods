@@ -184,7 +184,7 @@ namespace PlayroomsCoop
             if (_role == Role.Client) return;
             if (Net.Peers.ContainsKey(f.Id)) return;
             var (hosting, open) = FriendState(f.Id);
-            if (ModState(f.Id) == 2 || ModState(f.Id) == 1) { SetStatus(ModState(f.Id) == 1 ? $"{f.Name} has a different version of the mod." : $"{f.Name} doesn't have the co-op mod."); return; }
+            if (ModState(f.Id) == 2 || ModState(f.Id) == 1) { SetStatus(ModState(f.Id) == 1 ? $"{f.Name} has a different version of the mod." : NetCheck.Status(f.Name, f.Id)); return; }
             if (_role == Role.None && hosting && open) Join(f.Id);
             else if (_role != Role.Client) Invite(f.Id);
         }

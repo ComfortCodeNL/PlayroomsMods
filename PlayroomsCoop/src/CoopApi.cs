@@ -4,7 +4,6 @@ using UnityEngine;
 
 namespace PlayroomsCoop
 {
-    // used by other mods through reflection. add members, never change or remove them
     public static class CoopApi
     {
         public const int ApiVersion = 2;

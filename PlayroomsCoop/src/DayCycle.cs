@@ -33,7 +33,6 @@ namespace PlayroomsCoop
 
         private static readonly Dictionary<string, double> _directorWritten = new Dictionary<string, double>();
 
-        // other mods may write these too: a value we didn't write becomes the new base
         private static void TuneDirector(float now)
         {
             if (now < _nextDirectorCheck) return;

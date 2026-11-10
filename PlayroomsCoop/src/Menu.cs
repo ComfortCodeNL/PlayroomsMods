@@ -140,11 +140,11 @@ namespace PlayroomsCoop
                 var f = _friends[i];
                 var (hosting, open) = FriendState(f.Id);
                 int mod = ModState(f.Id);
-                string state = mod == 2 ? "<color=#888888>no mod</color>"
+                string state = mod == 2 ? $"<color=#888888>{NetCheck.Label(f.Id)}</color>"
                              : mod == 1 ? "<color=#FFB066>different mod version</color>"
                              : hosting ? (open ? "<color=#7CFC7C>HOSTING</color>" : "<color=#BBBBBB>in a game</color>")
                              : mod == 3 ? "<color=#BBBBBB>checking...</color>" : "<color=#BBBBBB>has the mod</color>";
-                GUI.Label(new Rect(PanelX + Pad, _y + 3f, 330f, 26f), $"{f.Name}   <size=13>{state}</size>", _textStyle);
+                GUI.Label(new Rect(PanelX + Pad, _y + 3f, 440f, 26f), $"{f.Name}   <size=13>{state}</size>", _textStyle);
 
                 string action = null;
                 if (mod == 1 || mod == 2 || Net.Peers.ContainsKey(f.Id)) action = null;

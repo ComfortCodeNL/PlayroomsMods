@@ -17,7 +17,7 @@ namespace PlayroomsCoop
         private const int IdentityTypeSteamID = 16;
         private const int EResultOK = 1;
 
-        private static IntPtr _friends, _user, _utils, _msgs;
+        private static IntPtr _friends, _user, _utils, _msgs, _netUtils;
         private static int _failures;
 
         public static bool Ready { get; private set; }
@@ -71,6 +71,17 @@ namespace PlayroomsCoop
 
                 Ready = true;
                 Plugin.Log.LogInfo($"Steam ready. Me={MyName} ({MySteamId}), AppID={AppId}");
+                try
+                {
+                    _netUtils = SteamAPI_SteamNetworkingUtils_SteamAPI_v004();
+                    if (_netUtils != IntPtr.Zero && Plugin.ForceSteamRelay.Value)
+                    {
+                        bool ok = SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32(_netUtils, ConfigIceEnable, 0);
+                        Plugin.Log.LogInfo(ok ? "[Net] direct connections off, everything goes through Steam's relay (ForceSteamRelay)" : "[Net] couldn't turn off direct connections");
+                    }
+                    if (_netUtils != IntPtr.Zero) SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(_netUtils);
+                }
+                catch (Exception e) { _netUtils = IntPtr.Zero; Plugin.Log.LogInfo("[Net] relay status not available: " + e.Message); }
                 return true;
             }
             catch (Exception e)
@@ -136,6 +147,47 @@ namespace PlayroomsCoop
             SteamAPI_ISteamNetworkingMessages_CloseSessionWithUser(_msgs, ref ident);
         }
 
+        public struct Session
+        {
+            public int State, EndReason;
+            public bool Relayed;
+            public string Debug;
+        }
+
+        private const int ConfigIceEnable = 104;
+        public const int StateNone = 0, StateConnecting = 1, StateFindingRoute = 2, StateConnected = 3, StateClosedByPeer = 4, StateProblem = 5;
+
+        private const int InfoState = 176, InfoEndReason = 180, InfoEndDebug = 184, InfoFlags = 440, FlagRelayed = 16;
+        private static readonly byte[] _info = new byte[1024];
+
+        public static Session GetSession(ulong with)
+        {
+            var r = new Session { Debug = "" };
+            if (!Ready || with == 0) return r;
+            var ident = MakeIdentity(with);
+            Array.Clear(_info, 0, _info.Length);
+            fixed (byte* p = _info)
+            {
+                r.State = SteamAPI_ISteamNetworkingMessages_GetSessionConnectionInfo(_msgs, ref ident, (IntPtr)p, IntPtr.Zero);
+                if (r.State != StateNone && BitConverter.ToInt32(_info, InfoState) == r.State)
+                {
+                    r.EndReason = BitConverter.ToInt32(_info, InfoEndReason);
+                    r.Relayed = (BitConverter.ToInt32(_info, InfoFlags) & FlagRelayed) != 0;
+                    int n = 0;
+                    while (n < 128 && _info[InfoEndDebug + n] != 0) n++;
+                    r.Debug = Encoding.UTF8.GetString(_info, InfoEndDebug, n);
+                }
+            }
+            return r;
+        }
+
+        public static int RelayStatus()
+        {
+            if (!Ready || _netUtils == IntPtr.Zero) return 0;
+            try { return SteamAPI_ISteamNetworkingUtils_GetRelayNetworkStatus(_netUtils, IntPtr.Zero); }
+            catch { _netUtils = IntPtr.Zero; return 0; }
+        }
+
         private static readonly IntPtr[] _inbox = new IntPtr[64];
 
         public static void Receive(Action<ulong, byte[], int> onMessage)
@@ -153,8 +205,6 @@ namespace PlayroomsCoop
                     IntPtr m = _inbox[i];
                     try
                     {
-                        //  0 void* m_pData | 8 int m_cbSize | 12 uint m_conn | 16 SteamNetworkingIdentity m_identityPeer
-                        //  identity: 0 int m_eType | 4 int m_cbSize | 8 uint64 m_steamID64
                         byte* basePtr = (byte*)m;
                         IntPtr data = *(IntPtr*)(basePtr + 0);
                         int size = *(int*)(basePtr + 8);
@@ -248,6 +298,15 @@ namespace PlayroomsCoop
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool SteamAPI_ISteamNetworkingMessages_CloseSessionWithUser(IntPtr self, ref NetIdentity remote);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int SteamAPI_ISteamNetworkingMessages_GetSessionConnectionInfo(IntPtr self, ref NetIdentity remote, IntPtr info, IntPtr quickStatus);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SteamAPI_SteamNetworkingUtils_SteamAPI_v004();
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(IntPtr self);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32(IntPtr self, int setting, int value);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int SteamAPI_ISteamNetworkingUtils_GetRelayNetworkStatus(IntPtr self, IntPtr details);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void SteamAPI_SteamNetworkingIdentity_SetSteamID64(ref NetIdentity self, ulong id);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void SteamAPI_SteamNetworkingMessage_t_Release(IntPtr msg);

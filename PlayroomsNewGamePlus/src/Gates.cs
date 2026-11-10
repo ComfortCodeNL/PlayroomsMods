@@ -9,12 +9,10 @@ internal static class Gates
 
     public static bool Replaying;
 
-    // only rules owned by upgrades, categories and shop items. others (mail timing) are left alone
     private static readonly HashSet<IntPtr> _rules = new();
     private static float _rulesAt = -99, _checkedAt = -99;
     private static int _registryCount = -1;
 
-    // also on while a NG+ world loads, so things the game builds at load time see it
     public static bool On => NewGamePlus.IsNgWorld && Plugin.OpenUnlocks.Value && Feature.Enabled;
 
     public static void Invalidate() => _rulesAt = _checkedAt = -99;

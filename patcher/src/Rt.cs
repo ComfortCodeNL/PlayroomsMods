@@ -5,7 +5,6 @@ using Il2CppInterop.Runtime;
 
 namespace PlayroomsPatcher
 {
-    // Raw il2cpp runtime helpers, plus the bits of System.Type reflection the C API doesn't expose
     internal static unsafe class Rt
     {
         public const int TVoid = 0x01, TBool = 0x02, TChar = 0x03, TI1 = 0x04, TU1 = 0x05, TI2 = 0x06, TU2 = 0x07,
@@ -26,7 +25,6 @@ namespace PlayroomsPatcher
             if (_runtimeType == IntPtr.Zero) throw new InvalidOperationException("System.RuntimeType not found");
         }
 
-        // Method by name on a class or its parents (0 args)
         private static IntPtr Find(IntPtr klass, string name)
         {
             if (_methods.TryGetValue((klass, name), out var m)) return m;
@@ -36,7 +34,6 @@ namespace PlayroomsPatcher
             return m;
         }
 
-        // Call an instance method with no arguments; Zero on failure
         public static IntPtr Call(IntPtr obj, string name)
         {
             if (obj == IntPtr.Zero) return IntPtr.Zero;
@@ -53,11 +50,9 @@ namespace PlayroomsPatcher
             return boxed == IntPtr.Zero ? fallback : *(int*)IL2CPP.il2cpp_object_unbox(boxed);
         }
 
-        // System.Type object for an Il2CppType, and back
         public static IntPtr TypeObject(IntPtr type) => type == IntPtr.Zero ? IntPtr.Zero : IL2CPP.il2cpp_type_get_object(type);
         public static IntPtr TypeOf(IntPtr typeObject) => typeObject == IntPtr.Zero ? IntPtr.Zero : *(IntPtr*)(typeObject + 2 * IntPtr.Size);
 
-        // Elements of an il2cpp object array
         public static List<IntPtr> Items(IntPtr array)
         {
             var list = new List<IntPtr>();
@@ -68,7 +63,6 @@ namespace PlayroomsPatcher
             return list;
         }
 
-        // Il2CppTypes from a Type[] returned by a reflection call
         public static List<IntPtr> TypeArray(IntPtr obj, string method)
         {
             var list = new List<IntPtr>();
@@ -78,7 +72,6 @@ namespace PlayroomsPatcher
 
         public static string ManagedString(IntPtr il2cppString) => il2cppString == IntPtr.Zero ? null : IL2CPP.Il2CppStringToManaged(il2cppString);
 
-        // Iterate a C API "get next" function
         public delegate IntPtr Next(IntPtr klass, ref IntPtr iter);
         public static IEnumerable<IntPtr> Iterate(IntPtr klass, Next next)
         {

@@ -87,7 +87,7 @@ internal static class UpgradeUnlock
         catch (Exception ex)
         {
             Plugin.Log.LogWarning((object)("New Game+ unlock of " + skillId + " failed: " + ((ex as System.Reflection.TargetInvocationException)?.InnerException ?? ex).Message));
-            return false; // never let the game throw "Cannot unlock" at the player
+            return false;
         }
     }
 
@@ -108,7 +108,7 @@ internal static class UpgradeUnlock
         {
             string cur = R.Get<string>(R.Get(cost, "Currency"), "CurrencyId");
             int amount = Convert.ToInt32(R.Get(cost, "Amount"));
-            if (amount > 0) R.Call(ss, "SpendCurrency", cur, amount, 1); // CurrencySink.Skill
+            if (amount > 0) R.Call(ss, "SpendCurrency", cur, amount, 1);
         }
 
         var levels = R.Get(R.Get(ss, "SaveData"), "SkillLevels");

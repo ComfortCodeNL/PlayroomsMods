@@ -73,7 +73,6 @@ internal static class Ui
 
         if (_notice != null && now < _noticeUntil)
         {
-            // same rect and style as Co-op's notice
             GUI.Label(new Rect(20f, h * 0.25f, 900f, 30f), "<b><color=" + Gold + ">" + _notice + "</color></b>", _text);
         }
 
@@ -122,7 +121,7 @@ internal static class Ui
             var color = Activator.CreateInstance(R.T("UnityEngine.Color"), r, g, b, a);
             R.Call(tex, "SetPixel", 0, 0, color);
             R.Call(tex, "Apply");
-            try { R.Set(tex, "hideFlags", 61); } catch { } // HideAndDontSave: survives scene loads
+            try { R.Set(tex, "hideFlags", 61); } catch { }
             var style = new GUIStyle(GUI.skin.box);
             R.Set(R.Get(style, "normal"), "background", tex);
             return style;

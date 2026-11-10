@@ -17,7 +17,6 @@ internal sealed class RunOptions
     public bool Tokens;
     public bool Kit;
 
-    // names contain "unlock" so Co-op syncs them to every player
     public const string ModeStat = "ngplus_unlocked_mode";
     public const string SpookyStat = "ngplus_unlocked_spooky";
     public const string TokensStat = "ngplus_unlocked_tokens";

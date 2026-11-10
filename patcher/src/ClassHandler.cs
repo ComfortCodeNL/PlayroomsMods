@@ -70,7 +70,6 @@ namespace PlayroomsPatcher
         public ref Il2CppRuntimeInterfaceOffsetPair* InterfaceOffsets => ref At<Il2CppOffsetsRef>(L.InterfaceOffsets).P;
         public ref Il2CppClass** TypeHierarchy => ref At<Il2CppClassesRef>(L.TypeHierarchy).P;
 
-        // implemented interfaces: the leading entries of the offsets table (6000.6), or our own array for injected classes
         public ref Il2CppClass** ImplementedInterfaces
         {
             get => ref *(Il2CppClass***)Slots.Get(Pointer, BuildInterfaces);
@@ -107,7 +106,6 @@ namespace PlayroomsPatcher
         private struct Il2CppOffsetsRef { public Il2CppRuntimeInterfaceOffsetPair* P; }
     }
 
-    // 6000.6 has no separate implemented-interfaces array: one pointer cell per class holds it
     internal static unsafe class Slots
     {
         private static readonly ConcurrentDictionary<IntPtr, IntPtr> _cells = new ConcurrentDictionary<IntPtr, IntPtr>();
