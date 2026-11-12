@@ -12,6 +12,7 @@ namespace PlayroomsCoop
         public const int Channel = 47;
         public const int SendUnreliable = 0 | 1 | 32;
         public const int SendReliable = 8 | 32;
+        private const int ReliableFlag = 8;
 
         private const int FriendFlagImmediate = 0x04;
         private const int IdentityTypeSteamID = 16;
@@ -79,6 +80,12 @@ namespace PlayroomsCoop
                         bool ok = SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32(_netUtils, ConfigIceEnable, 0);
                         Plugin.Log.LogInfo(ok ? "[Net] direct connections off, everything goes through Steam's relay (ForceSteamRelay)" : "[Net] couldn't turn off direct connections");
                     }
+                    if (_netUtils != IntPtr.Zero)
+                    {
+                        bool rate = SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32(_netUtils, ConfigSendRateMax, MaxSendBytesPerSecond)
+                                  & SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32(_netUtils, ConfigSendBufferSize, SendBufferBytes);
+                        Plugin.Log.LogInfo(rate ? $"[Net] send limit raised to {MaxSendBytesPerSecond / 1024} KB/s, buffer {SendBufferBytes / 1024 / 1024} MB" : "[Net] couldn't raise the send limit");
+                    }
                     if (_netUtils != IntPtr.Zero) SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(_netUtils);
                 }
                 catch (Exception e) { _netUtils = IntPtr.Zero; Plugin.Log.LogInfo("[Net] relay status not available: " + e.Message); }
@@ -129,8 +136,25 @@ namespace PlayroomsCoop
             fixed (byte* p = data)
             {
                 int r = SteamAPI_ISteamNetworkingMessages_SendMessageToUser(_msgs, ref ident, p, (uint)len, flags, Channel);
+                if (r != EResultOK) SendFailed(to, r, flags);
                 return r == EResultOK;
             }
+        }
+
+        private static readonly Dictionary<(ulong to, int result), (int reliable, int unreliable)> _sendFails = new Dictionary<(ulong, int), (int, int)>();
+        private static float _nextFailLog;
+
+        private static void SendFailed(ulong to, int result, int flags)
+        {
+            _sendFails.TryGetValue((to, result), out var n);
+            if ((flags & ReliableFlag) != 0) n.reliable++; else n.unreliable++;
+            _sendFails[(to, result)] = n;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (now < _nextFailLog) return;
+            _nextFailLog = now + 30f;
+            foreach (var kv in _sendFails)
+                Plugin.Log.LogWarning($"[Net] {kv.Value.reliable} reliable and {kv.Value.unreliable} quick messages to {NameOf(kv.Key.to)} weren't sent (Steam result {kv.Key.result})");
+            _sendFails.Clear();
         }
 
         public static void Accept(ulong from)
@@ -154,7 +178,7 @@ namespace PlayroomsCoop
             public string Debug;
         }
 
-        private const int ConfigIceEnable = 104;
+        private const int ConfigIceEnable = 104, ConfigSendRateMax = 11, ConfigSendBufferSize = 9, MaxSendBytesPerSecond = 2 * 1024 * 1024, SendBufferBytes = 8 * 1024 * 1024;
         public const int StateNone = 0, StateConnecting = 1, StateFindingRoute = 2, StateConnected = 3, StateClosedByPeer = 4, StateProblem = 5;
 
         private const int InfoState = 176, InfoEndReason = 180, InfoEndDebug = 184, InfoFlags = 440, FlagRelayed = 16;

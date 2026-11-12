@@ -32,7 +32,9 @@ namespace PlayroomsCoop
 
         private static readonly List<(string room, int idx)> _outTaken = new List<(string, int)>();
         private static readonly Dictionary<string, int> _outPits = new Dictionary<string, int>();
-        private static readonly Dictionary<string, int> _pitLast = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> _pitSeen = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> _pitRemote = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> _outPitAdds = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> _pitTarget = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> _pitPending = new Dictionary<string, int>();
         private static float _nextPitPoll;
@@ -41,12 +43,13 @@ namespace PlayroomsCoop
         private static readonly Dictionary<IntPtr, Mover> _moving = new Dictionary<IntPtr, Mover>();
         private sealed class Puppet
         {
-            public object Spot, Ball, Body; public bool OrigKinematic, Shown; public float LastUpdate, Radius = 0.1f;
+            public object Spot, Ball, Body; public bool OrigKinematic, Shown; public float LastUpdate, Created, Radius = 0.1f;
             public Vector3 Target, LastShown;
             public readonly List<(float t, Vector3 p)> Samples = new List<(float, Vector3)>();
         }
         private const float InterpDelay = 0.1f;
         private static readonly Dictionary<IntPtr, float> _recentPuppet = new Dictionary<IntPtr, float>();
+        private static readonly Dictionary<IntPtr, float> _mutedLive = new Dictionary<IntPtr, float>();
         private static readonly List<object> _disabledVents = new List<object>();
         private static readonly List<Vector3> _ventIntakes = new List<Vector3>();
         private static float _nextVentScan;
@@ -100,9 +103,9 @@ namespace PlayroomsCoop
             _connected = true; _isHost = isHost;
             _snapshotSentFor = IntPtr.Zero;
             _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear(); _warnedRooms.Clear();
-            _pitLast.Clear(); _pitTarget.Clear(); _pitPending.Clear();
+            _pitSeen.Clear(); _pitRemote.Clear(); _outPitAdds.Clear(); _pitTarget.Clear(); _pitPending.Clear();
             _doorLast.Clear(); _doorIgnoreUntil.Clear(); _doorCloseWait.Clear(); _dayLastPhase = -1;
-            _moving.Clear(); _recentTaken.Clear(); _outMoved.Clear(); _outLive.Clear(); _recentPuppet.Clear(); _settleCool.Clear();
+            _moving.Clear(); _recentTaken.Clear(); _outMoved.Clear(); _outLive.Clear(); _recentPuppet.Clear(); _mutedLive.Clear(); _settleCool.Clear();
             _restQueue.Clear(); BroomReset(); SusanneReset(); RespawnReset();
             foreach (var v in _disabledVents) { try { if (Alive(v)) ((Behaviour)v).enabled = true; } catch { } }
             _disabledVents.Clear(); _ventIntakes.Clear();
@@ -121,7 +124,7 @@ namespace PlayroomsCoop
             _connected = false; _pendDay = -1; _bedCheckAt = -1f; _keptPairs.Clear();
             Entity.Try(RestoreEnemy, "restore entity");
             if (_proxy != null) { UnityEngine.Object.Destroy(_proxy); _proxy = null; }
-            _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear();
+            _pendingTakes.Clear(); _outTaken.Clear(); _outPits.Clear(); _outPitAdds.Clear();
             _restQueue.Clear(); BroomReset(); SusanneReset(); RespawnReset();
             Scares.Try(RestoreDirector, "restore scares");
             Upgrades.OnDisconnected();
@@ -349,7 +352,7 @@ namespace PlayroomsCoop
 
         private static bool HostOnly(Msg type) =>
             type == Msg.WalletState || type == Msg.DayTime || type == Msg.Enemy || type == Msg.EnemyCaught ||
-            type == Msg.EnemyNotice || type == Msg.ObjOwner;
+            type == Msg.EnemyNotice || type == Msg.ObjOwner || type == Msg.PitAmount;
 
         private static readonly HashSet<ulong> _warnedHostOnly = new HashSet<ulong>();
 
@@ -475,6 +478,14 @@ namespace PlayroomsCoop
                 case Msg.DevicesHome:
                     OnDevicesHome();
                     break;
+                case Msg.PitAdd:
+                {
+                    if (!Pits.Enabled || !_isHost) return;
+                    var r = new Reader(buf, len, Protocol.HeaderSize);
+                    string id = r.Str(); int added = r.I32();
+                    Pits.Try(() => QueuePitAdd(id, added), "add to pit");
+                    break;
+                }
                 case Msg.StatSet:
                     Unlocks.Handle(buf, len);
                     break;
@@ -526,7 +537,7 @@ namespace PlayroomsCoop
             for (int k = 0; k < pits; k++)
             {
                 string id = r.Str(); int amount = r.I32();
-                if (Pits.Enabled) Pits.Try(() => QueuePit(id, amount), "snapshot pit");
+                if (Pits.Enabled && !_isHost) Pits.Try(() => QueuePit(id, amount), "snapshot pit");
             }
             Plugin.Log.LogInfo($"Received world snapshot: {rooms} rooms, {queued} collected balls to merge, {pits} pits");
         }

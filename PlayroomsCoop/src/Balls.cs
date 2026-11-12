@@ -35,6 +35,7 @@ namespace PlayroomsCoop
             var spot = R.At(spots, idx);
             if (spot == null || R.Get<bool>(spot, "IsCollected")) return;
 
+            DropPuppet(spot);
             var bs = _ballService;
             object pos = R.Get(spot, "Position");
             _applying = true;
@@ -128,6 +129,16 @@ namespace PlayroomsCoop
                 }
                 _outPits.Clear();
             }
+            if (_outPitAdds.Count > 0)
+            {
+                foreach (var kv in _outPitAdds)
+                {
+                    var w = Protocol.W.Begin(Msg.PitAdd);
+                    w.Str(kv.Key); w.I32(kv.Value);
+                    Net.SendHost(w, SteamNet.SendReliable);
+                }
+                _outPitAdds.Clear();
+            }
         }
 
         private static void SendSnapshot()
@@ -185,7 +196,7 @@ namespace PlayroomsCoop
             if (idx < 0 || idx >= R.Count(spots)) return;
             var spot = R.At(spots, idx);
             if (spot == null) return;
-            if (_puppets.TryGetValue(R.Ptr(spot), out var pup)) { ReleasePuppet(pup); _puppets.Remove(R.Ptr(spot)); }
+            DropPuppet(spot);
             var bs = _ballService;
             _applying = true;
             try

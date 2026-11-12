@@ -64,6 +64,7 @@ namespace PlayroomsCoop
         ModCounterTake = 55,
         ModCounterResult = 56,
         DevicesHome = 57,
+        PitAdd = 58,
     }
 
     internal struct PoseState
@@ -143,7 +144,7 @@ namespace PlayroomsCoop
     internal static class Protocol
     {
         public const uint Magic = 0x31435250;
-        public const byte Version = 41;
+        public const byte Version = 42;
         public const int HeaderSize = 6;
         public const int MaxPacket = 1 << 20;
 
@@ -190,7 +191,7 @@ namespace PlayroomsCoop
             var w = W.Begin(Msg.State);
             w.U32(s.Seq); w.F32(s.X); w.F32(s.Y); w.F32(s.Z); w.F32(s.Yaw); w.F32(s.Pitch); w.F32(s.EyeHeight);
             w.U8((byte)((s.InWorld ? 1 : 0) | (s.Sweeping ? 2 : 0)));
-            w.SendAll(SteamNet.SendUnreliable);
+            w.SendAll(s.Seq % 10 == 0 ? SteamNet.SendReliable : SteamNet.SendUnreliable);
         }
 
         public static bool ReadState(byte[] buf, int len, out PoseState s)

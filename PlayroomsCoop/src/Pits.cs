@@ -19,13 +19,27 @@ namespace PlayroomsCoop
             {
                 if (!Alive(kv.Value)) continue;
                 int amount = R.Get<int>(kv.Value, "BallAmount");
-                if (!_pitLast.TryGetValue(kv.Key, out int last)) { _pitLast[kv.Key] = amount; continue; }
-                if (amount > last)
-                {
-                    _pitLast[kv.Key] = amount;
-                    _outPits[kv.Key] = amount;
-                }
+                if (!_pitSeen.TryGetValue(kv.Key, out int seen) || amount < seen) { _pitSeen[kv.Key] = amount; continue; }
+                if (amount == seen) continue;
+                _pitSeen[kv.Key] = amount;
+                _pitRemote.TryGetValue(kv.Key, out int remote);
+                int own = amount - seen - remote;
+                _pitRemote[kv.Key] = own < 0 ? -own : 0;
+                if (_isHost) _outPits[kv.Key] = amount;
+                else if (own > 0) { _outPitAdds.TryGetValue(kv.Key, out int queued); _outPitAdds[kv.Key] = queued + own; }
             }
+        }
+
+        private static void QueuePitAdd(string id, int added)
+        {
+            if (added <= 0) return;
+            var pit = Pit(id);
+            if (pit == null) return;
+            int local = R.Get<int>(pit, "BallAmount");
+            _pitTarget.TryGetValue(id, out int target);
+            _pitTarget[id] = Math.Max(target, local) + added;
+            _pitPending.TryGetValue(id, out int pending);
+            _pitPending[id] = pending + added;
         }
 
         private const int MaxPitStep = 5000;
@@ -38,7 +52,6 @@ namespace PlayroomsCoop
             _pitTarget.TryGetValue(id, out int target);
             int from = Math.Max(target, local);
             amount = Math.Min(amount, from + MaxPitStep);
-            if (_pitLast.TryGetValue(id, out int last)) _pitLast[id] = Math.Max(last, amount); else _pitLast[id] = Math.Max(local, amount);
             if (amount <= from) return;
             _pitTarget[id] = amount;
             _pitPending.TryGetValue(id, out int pending);
@@ -64,13 +77,15 @@ namespace PlayroomsCoop
                             int color = 0;
                             try { if (_ballService != null) color = Convert.ToInt32(R.Call(_ballService, "GetRandomColorIndex")); } catch { }
                             bool ok;
+                            int before = R.Get<int>(pit, "BallAmount");
                             try { ok = DropBall(pit, color); }
                             catch (Exception e)
                             {
                                 if (_stepWarned.Add("OnCountDelivered")) Plugin.Log.LogWarning("[Pits] delivery failed, setting amounts directly: " + ((e as System.Reflection.TargetInvocationException)?.InnerException ?? e).Message);
                                 ok = false;
                             }
-                            if (!ok) { SetPitDirect(pit, _pitTarget.TryGetValue(id, out int t) ? t : 0); n = 0; break; }
+                            if (!ok) { SetPitDirect(id, pit, _pitTarget.TryGetValue(id, out int t) ? t : 0); n = 0; break; }
+                            AddRemote(id, Math.Max(0, R.Get<int>(pit, "BallAmount") - before));
                             n--; budget--;
                         }
                     }
@@ -119,9 +134,17 @@ namespace PlayroomsCoop
             return rim + new Vector3(0f, 1.5f, 0f);
         }
 
-        private static void SetPitDirect(object pit, int amount)
+        private static void AddRemote(string id, int n)
         {
-            if (R.Get<int>(pit, "BallAmount") >= amount) return;
+            _pitRemote.TryGetValue(id, out int remote);
+            _pitRemote[id] = remote + n;
+        }
+
+        private static void SetPitDirect(string id, object pit, int amount)
+        {
+            int before = R.Get<int>(pit, "BallAmount");
+            if (before >= amount) return;
+            AddRemote(id, amount - before);
             R.Set(pit, "BallAmount", amount);
             Step(() => R.Call(pit, "NotifyBallAmountChanged", false), "NotifyBallAmountChanged");
             Step(() => R.Call(pit, "RefreshBallSurface"), "RefreshBallSurface");

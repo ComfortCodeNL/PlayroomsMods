@@ -12,7 +12,7 @@ namespace PlayroomsCoop
     {
         public const string Guid = "com.playroomscoop.mod";
         public const string Name = "Playrooms Co-op";
-        public const string Version = "1.1.3";
+        public const string Version = "1.1.4";
 
         internal static new ManualLogSource Log;
 
@@ -29,7 +29,8 @@ namespace PlayroomsCoop
         internal static ConfigEntry<string> PitDropStyle;
         internal static ConfigEntry<bool> ReplayBroom, SyncSusanne, ClientVents, FixStrayBalls, CoopRespawn, BetterUnstuck, ShowBroom, CheckHostSave;
         internal static ConfigEntry<float> BallCorrection;
-        internal static ConfigEntry<bool> PerfLog;
+        internal static ConfigEntry<bool> PerfLog, AutoLowerGraphics;
+        internal static ConfigEntry<float> PileRadiusScale, LowFps;
 
         public override void Load()
         {
@@ -70,6 +71,9 @@ namespace PlayroomsCoop
             CoopRespawn = Config.Bind("World", "CoopRespawn", true, "Caught while another player is safe (daytime, or in the clean room at night): you wake up in the clean room instead of dying.");
             BetterUnstuck = Config.Bind("World", "BetterUnstuck", true, "Unstuck (pause menu) moves you next to the nearest player standing somewhere walkable, otherwise back to the clean room. 10 s cooldown. Works in solo too (clean room).");
             ShowBroom = Config.Bind("Players", "ShowBroom", true, "Show a broom in other players' hands while they push with it.");
+            PileRadiusScale = Config.Bind("Performance", "PileRadiusScale", 0.75f, "In co-op, how far around you balls stay awake with full physics, compared with your quality setting. Lower = smoother in big piles, but far balls react a moment later. 1 = same as solo.");
+            AutoLowerGraphics = Config.Bind("Performance", "AutoLowerGraphics", true, "In co-op, lower some graphics (ball shadows, portal quality, ball detail, lamp shadows) step by step while your fps stays under LowFps, and put them back when it recovers.");
+            LowFps = Config.Bind("Performance", "LowFps", 40f, "Frames per second below which AutoLowerGraphics starts lowering graphics.");
             PerfLog = Config.Bind("Debug", "PerfLog", true, "Write a line to the log every 30 s showing how much frame time each co-op feature uses.");
             World.Init();
 

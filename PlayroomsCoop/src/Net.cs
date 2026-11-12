@@ -17,6 +17,7 @@ namespace PlayroomsCoop
             public int Color = -1;
             public float LastRecv;
             public bool InWorld;
+            public uint StateSeq; public float StateAt; public float NoStateLogged;
             public Vector3? Head;
             public bool Dead, Safe;
             public bool BroomReplay;

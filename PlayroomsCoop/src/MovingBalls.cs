@@ -72,6 +72,7 @@ namespace PlayroomsCoop
                     continue;
                 }
                 var pos = ((Component)m.Ball).transform.position;
+                if (!m.Quiet && now - m.Since > MaxLiveTime) { _moving.Remove(p); _settleCool[p] = now; _outMoved.Add((m.Room, m.Idx, pos)); QueueStrayCheck(m.Spot); continue; }
                 if (!m.Quiet && Dist(pos, m.LastSent) > 0.01f) { _outLive.Add((m.Room, m.Idx, pos)); m.LastSent = pos; }
 
                 float speed2 = 0f;
@@ -122,7 +123,10 @@ namespace PlayroomsCoop
         private const int ScanBudget = 400;
         private static int _scanCursor;
         private const int MaxMoving = 200, MaxQuiet = 5000, MaxGlides = 150;
-        private const float GlideTime = 0.4f;
+        private const float GlideTime = 0.4f, MaxLiveTime = 10f, MaxPuppetTime = 12f, MuteTime = 6f;
+        private const int PuppetDrawBudget = 60;
+        private static int _puppetCursor;
+        private static long _puppetFrame;
 
         private static bool TryGlide(object spot, Vector3 from, Vector3 to, float now)
         {
@@ -202,6 +206,7 @@ namespace PlayroomsCoop
             IntPtr p = R.Ptr(spot);
             if (_moving.ContainsKey(p)) return;
             float now = Time.realtimeSinceStartup;
+            if (_mutedLive.TryGetValue(p, out float mutedUntil) && now < mutedUntil) return;
             if (!_puppets.ContainsKey(p) && LocalSweepNear(pos, now)) return;
 
             if (!_puppets.TryGetValue(p, out var pp) || !Alive(pp.Ball) || !R.Same(R.Get(pp.Ball, "Owner"), spot))
@@ -234,12 +239,12 @@ namespace PlayroomsCoop
                     if (ball != null && !SafeBool(ball, "IsActive")) Step(() => R.Call(ball, "Activate"), "Activate");
                 }
                 if (ball == null) return null;
-                var pp = new Puppet { Spot = spot, Ball = ball, Target = pos, LastShown = pos };
+                var pp = new Puppet { Spot = spot, Ball = ball, Target = pos, LastShown = pos, Created = Time.realtimeSinceStartup };
                 try { pp.Radius = Math.Max(0.02f, ((Component)ball).transform.localScale.x * 0.5f); } catch { }
                 try { pp.Body = R.Get(ball, "Body"); } catch { }
                 if (pp.Body != null)
                 {
-                    pp.OrigKinematic = Convert.ToBoolean(R.Get(pp.Body, "isKinematic"));
+                    pp.OrigKinematic = !SafeBool(ball, "IsActive") && Convert.ToBoolean(R.Get(pp.Body, "isKinematic"));
                     R.Set(pp.Body, "isKinematic", true);
                 }
                 ((Component)ball).transform.position = pos;
@@ -257,10 +262,21 @@ namespace PlayroomsCoop
             float renderT = now - InterpDelay;
             _puppetKeys.Clear();
             _puppetKeys.AddRange(_puppets.Keys);
-            foreach (var p in _puppetKeys)
+            int count = _puppetKeys.Count, drawn = 0;
+            int first = _puppetCursor % count;
+            long frame = ++_puppetFrame;
+            for (int k = 0; k < count; k++)
             {
+                var p = _puppetKeys[(first + k) % count];
                 var pp = _puppets[p];
                 if (!Alive(pp.Ball)) { _puppets.Remove(p); continue; }
+                bool checkNow = ((p.ToInt64() >> 4) + frame) % 6 == 0;
+                if (checkNow && (!R.Same(R.Get(pp.Ball, "Owner"), pp.Spot) || R.Get<bool>(pp.Spot, "IsCollected")))
+                {
+                    RestoreBody(pp);
+                    _puppets.Remove(p);
+                    continue;
+                }
                 var t = ((Component)pp.Ball).transform;
                 if (_isHost && NearVent(t.position))
                 {
@@ -268,10 +284,28 @@ namespace PlayroomsCoop
                     _puppets.Remove(p);
                     continue;
                 }
+                if (now - pp.Created > MaxPuppetTime)
+                {
+                    ReleasePuppet(pp);
+                    _puppets.Remove(p);
+                    _mutedLive[p] = now + MuteTime;
+                    continue;
+                }
+                bool pastEnd = pp.Samples.Count == 0 || renderT > pp.Samples[pp.Samples.Count - 1].t + 0.15f;
+                if (now - pp.LastUpdate > 0.6f && pastEnd)
+                {
+                    t.position = pp.Target;
+                    try { R.Set(pp.Spot, "Position", pp.Target); } catch { }
+                    ReleasePuppet(pp);
+                    _puppets.Remove(p);
+                    continue;
+                }
+                if (drawn >= PuppetDrawBudget) continue;
                 var pos = Sample(pp.Samples, renderT);
                 Vector3 d = pos - pp.LastShown;
                 if (d.sqrMagnitude > 0.0000001f || !pp.Shown)
                 {
+                    drawn++;
                     t.position = pos;
                     float dist = Mathf.Sqrt(d.x * d.x + d.z * d.z);
                     if (dist > 0.0005f)
@@ -282,15 +316,24 @@ namespace PlayroomsCoop
                     pp.LastShown = pos; pp.Shown = true;
                     InvalidateDraw(pp.Ball);
                 }
-                bool pastEnd = pp.Samples.Count == 0 || renderT > pp.Samples[pp.Samples.Count - 1].t + 0.15f;
-                if (now - pp.LastUpdate > 0.6f && pastEnd)
-                {
-                    t.position = pp.Target;
-                    try { R.Set(pp.Spot, "Position", pp.Target); } catch { }
-                    ReleasePuppet(pp);
-                    _puppets.Remove(p);
-                }
             }
+            _puppetCursor = first + Math.Max(1, drawn);
+            if (_mutedLive.Count > 500)
+                foreach (var key in new List<IntPtr>(_mutedLive.Keys)) if (_mutedLive[key] < now) _mutedLive.Remove(key);
+        }
+
+        private static void DropPuppet(object spot)
+        {
+            IntPtr p = R.Ptr(spot);
+            if (!_puppets.TryGetValue(p, out var pp)) return;
+            RestoreBody(pp);
+            _puppets.Remove(p);
+            try { _recentPuppet[p] = Time.realtimeSinceStartup; } catch { }
+        }
+
+        private static void RestoreBody(Puppet pp)
+        {
+            try { if (pp.Body != null && Alive(pp.Ball)) R.Set(pp.Body, "isKinematic", SafeBool(pp.Ball, "IsActive") ? false : pp.OrigKinematic); } catch { }
         }
 
         private static void InvalidateDraw(object ball)
@@ -328,12 +371,7 @@ namespace PlayroomsCoop
 
         private static void ReleasePuppet(Puppet pp)
         {
-            try
-            {
-                if (pp.Body != null && Alive(pp.Ball))
-                    R.Set(pp.Body, "isKinematic", SafeBool(pp.Ball, "IsActive") ? false : pp.OrigKinematic);
-            }
-            catch { }
+            RestoreBody(pp);
             try { _recentPuppet[R.Ptr(pp.Spot)] = Time.realtimeSinceStartup; } catch { }
         }
     }

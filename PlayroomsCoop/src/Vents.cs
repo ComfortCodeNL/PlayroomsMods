@@ -102,7 +102,7 @@ namespace PlayroomsCoop
             object vent = null; float best = float.MaxValue;
             foreach (var (v, p) in _vents) { if (!Alive(v)) continue; float d = Dist(p, at); if (d < best) { best = d; vent = v; } }
             IntPtr sp = R.Ptr(spot);
-            if (_puppets.TryGetValue(sp, out var pup)) { ReleasePuppet(pup); _puppets.Remove(sp); }
+            DropPuppet(spot);
             _moving.Remove(sp);
             var ball = R.Get(spot, "Instance");
             if ((ball == null || !SafeBool(ball, "IsActive")) && _ballService != null)

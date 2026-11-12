@@ -56,7 +56,13 @@ namespace PlayroomsCoop
                 var av = kv.Value;
                 if (p == null || !av.Alive) continue;
                 av.Tick(dt);
+                av.CheckParts();
                 p.Head = av.HasPose ? av.HeadPosition : (Vector3?)null;
+                if (now - p.LastRecv < 2f && p.StateAt > 0f && now - p.StateAt > 5f && now - p.NoStateLogged > 30f)
+                {
+                    p.NoStateLogged = now;
+                    Plugin.Log.LogWarning($"[Avatars] {p.Name} is connected but no position has arrived for {now - p.StateAt:0} s");
+                }
                 if (!inWorld || !p.InWorld) av.SetVisible(false);
             }
 
@@ -66,7 +72,7 @@ namespace PlayroomsCoop
                 if (now >= _nextSend)
                 {
                     _nextSend = now + 0.5f;
-                    var hidden = _lastPose; hidden.InWorld = false; if (hidden.Seq == 0) hidden.Seq = ++_seq;
+                    var hidden = _lastPose; hidden.InWorld = false; hidden.Seq = ++_seq;
                     Protocol.SendState(hidden);
                 }
                 return;

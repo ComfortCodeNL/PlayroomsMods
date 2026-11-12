@@ -84,6 +84,7 @@ namespace PlayroomsCoop
             if (r != null)
             {
                 r.sharedMaterial = mat;
+                try { R.Set(r, "allowOcclusionWhenDynamic", false); } catch { }
                 _renderers.Add(r);
             }
             return go;
@@ -222,6 +223,22 @@ namespace PlayroomsCoop
             }
         }
 
+        private float _nextPartCheck;
+        public void CheckParts()
+        {
+            if (_root == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (now < _nextPartCheck) return;
+            _nextPartCheck = now + 2f;
+            foreach (var r in _renderers)
+            {
+                if (r != null && r.sharedMaterial != null) continue;
+                Plugin.Log.LogWarning($"[Avatars] {Label}'s model lost a part, rebuilding it");
+                Object.Destroy(_root);
+                return;
+            }
+        }
+
         public void SetVisible(bool v)
         {
             if (_root != null && _root.activeSelf != v) _root.SetActive(v);
@@ -251,6 +268,7 @@ namespace PlayroomsCoop
 
             var m = new Material(Template());
             m.name = "PlayroomsCoop_" + key;
+            KeepLoaded(m);
             SetColorIfPresent(m, "_BaseColor", c);
             SetColorIfPresent(m, "_Color", c);
             SetColorIfPresent(m, "_UnlitColor", c);
@@ -270,6 +288,12 @@ namespace PlayroomsCoop
             return m;
         }
 
+        private static void KeepLoaded(Material m)
+        {
+            try { R.Set(m, "hideFlags", DontUnloadUnusedAsset); } catch { }
+        }
+        private const int DontUnloadUnusedAsset = 32;
+
         private static void SetColorIfPresent(Material m, string prop, Color c)
         {
             if (m.HasProperty(prop)) m.SetColor(prop, c);
@@ -287,6 +311,7 @@ namespace PlayroomsCoop
                 if (mat != null && mat.shader != null && mat.shader.isSupported && !mat.shader.name.Contains("Error"))
                 {
                     _template = new Material(mat);
+                    KeepLoaded(_template);
                     Plugin.Log.LogInfo("Avatar material: using pipeline default shader " + mat.shader.name);
                     return _template;
                 }
@@ -299,6 +324,7 @@ namespace PlayroomsCoop
                 if (sh != null && sh.isSupported)
                 {
                     _template = new Material(sh);
+                    KeepLoaded(_template);
                     Plugin.Log.LogInfo("Avatar material: using fallback shader " + name);
                     return _template;
                 }

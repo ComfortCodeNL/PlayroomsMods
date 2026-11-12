@@ -240,6 +240,7 @@ namespace PlayroomsCoop
             ClockGate();
             ClockHold();
             World.Tick(now, dt);
+            LagGuard.Tick(now, dt, _worldStarted && Net.Peers.Count > 0 && World.InGameWorld());
             CoopApi.Tick(now);
         }
 
@@ -362,7 +363,10 @@ namespace PlayroomsCoop
                     if (!_connected || peer == null) break;
                     if (!Protocol.ReadState(buf, len, out PoseState s)) break;
                     if (s.Seq == 0) break;
+                    if (s.Seq <= peer.StateSeq && peer.StateSeq - s.Seq < 1000) break;
+                    peer.StateSeq = s.Seq; peer.StateAt = now;
                     var av = AvatarFor(peer);
+                    if (peer.InWorld != s.InWorld) Plugin.Log.LogInfo($"[Avatars] {peer.Name} {(s.InWorld ? "is in the world" : "left the world (menu or loading)")}");
                     peer.InWorld = s.InWorld;
                     if (s.InWorld) { av.SetTarget(s); av.SetBroom(s.Sweeping && Plugin.ShowBroom.Value); }
                     else av.SetVisible(false);
