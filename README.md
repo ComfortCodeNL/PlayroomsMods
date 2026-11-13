@@ -1,3 +1,12 @@
+# ComfortCode PlayroomsMods fork
+
+Deze fork bevat de originele bronbestanden van **TheWildLeon/PlayroomsCoopMod** en daarnaast een **nieuwe, afzonderlijke ComfortCode-plugin: [Comfort Shift HUD](PlayroomsShiftHUD/README.md)**.
+
+De nieuwe mod toont resterende ballen in de huidige kamer, tijd tot het einde van de shift, aantal en namen van volledig opgeruimde kamers en een END DAY-banner. Bij shifteinde creëert hij optioneel lokaal werklicht, zonder de dagklok, co-op-synchronisatie of saves te veranderen. De originele PlayroomsCoop en New Game+ blijven onveranderd.
+
+**Installatie:** de nieuwe mod wordt vanuit de eigen broncode op de Windows-pc gebouwd met de al werkende Unity 6000.6 BepInEx-patcher en bestaande IL2CPP-interop. Gebruik scripts/install-shift-hud.ps1 (eerst zonder -Apply; daarna met -Apply). Er is nog **geen** bevestigde echte Windows-/Unity-clienttest van deze mod. De originele release-ZIP's van TheWildLeon bevatten deze nieuwe plugin niet automatisch.
+
+---
 # Playrooms Co-op + New Game+
 
 Two mods for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/), hosted together for now:
