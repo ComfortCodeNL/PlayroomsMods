@@ -125,17 +125,25 @@ namespace ComfortCode.Playrooms.ShiftHUD
                 var dts = GameAccess.First("TwoPixels.DayTime.DayTimeService");
                 if (dts == null)
                 {
+                    // Do not hide the whole HUD merely because the clock was not
+                    // resolved yet. Rooms and balls must remain independently visible.
+                    _isInWorld = _rooms.Count > 0 ||
+                        GameAccess.First("TwoPixels.Ball.BallService") != null;
                     _hasClock = false;
                     return;
                 }
                 if (GameAccess.TryBool(dts, "HasStarted", out var started) && !started)
                 {
+                    _isInWorld = _rooms.Count > 0 ||
+                        GameAccess.First("TwoPixels.Ball.BallService") != null;
                     _hasClock = false;
                     return;
                 }
                 if (!GameAccess.TryInt(dts, "_phase", out int phase) ||
                     !GameAccess.TryFloat(dts, "RemainingTime", out float seconds))
                 {
+                    _isInWorld = _rooms.Count > 0 ||
+                        GameAccess.First("TwoPixels.Ball.BallService") != null;
                     _hasClock = false;
                     return;
                 }
