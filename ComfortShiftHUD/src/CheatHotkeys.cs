@@ -184,23 +184,42 @@ namespace ComfortCode.Playrooms.ShiftHud
                 catalog.Add((id, item.value, current, max));
             }
             if (catalog.Count == 0) throw new InvalidOperationException("Geen bekende skilldefinities.");
-            var selected = new List<(string id, int max)>();
+            var selected = new List<(string id, int current, int max)>();
             foreach (var item in catalog)
             {
                 if (vacuumOnly &&
                     item.id.IndexOf("vacuum", StringComparison.OrdinalIgnoreCase) < 0 &&
                     item.id.IndexOf("suction", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                if (item.current < item.max) selected.Add((item.id, item.max));
+                if (item.current < item.max) selected.Add((item.id, item.current, item.max));
             }
             if (selected.Count == 0) return 0;
 
-            // Replicate NG+'s tested effect rebuild procedure to prevent duplicate bonuses.
-            foreach (var item in catalog)
-                if (item.current > 0) Call(skills, "RemoveSkillTemplates", item.def);
-            foreach (var item in selected)
-                Call(levels, "set_Item", item.id, item.max);
-            Call(skills, "ReplayUnlockedSkills");
-            return selected.Count;
+            // Rebuild from definitions once. If any step fails, restore the
+            // previous levels and replay original effects where possible.
+            try
+            {
+                foreach (var item in catalog)
+                    if (item.current > 0) Call(skills, "RemoveSkillTemplates", item.def);
+                foreach (var item in selected)
+                    Call(levels, "set_Item", item.id, item.max);
+                Call(skills, "ReplayUnlockedSkills");
+                return selected.Count;
+            }
+            catch (Exception failed)
+            {
+                try
+                {
+                    foreach (var item in selected)
+                        Call(levels, "set_Item", item.id, item.current);
+                    Call(skills, "ReplayUnlockedSkills");
+                    Plugin.Logger?.LogWarning("[ShiftHUD] Skill-level changes rolled back after an exception.");
+                }
+                catch (Exception rollback)
+                {
+                    Plugin.Logger?.LogError("[ShiftHUD] SKILL ROLLBACK FAILED. Restore your save backup: " + rollback);
+                }
+                throw new InvalidOperationException("Skill upgrade was not completed; original values restored where possible.", failed);
+            }
         }
 
         private static void AllSkills()
