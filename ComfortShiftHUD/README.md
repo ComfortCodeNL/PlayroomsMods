@@ -26,11 +26,15 @@ Op basis van de game-interop uit de in deze conversatie aangeleverde Playrooms-m
 
 De originele co-opbron in dezelfde repository gebruikt eveneens RoomObject/DayTimeService en interpreteert fase 0 als dag, fase 1/2 als licht-uit/nacht en fase 3 als nieuwe dag. Deze interopnamen zijn **geen bewijs** dat Harmony de native method daadwerkelijk veilig kan patchen. De patchinstelling is apart uit te schakelen.
 
-## Buildcorrectie: TextAnchor / TextRenderingModule
+## Buildcorrectie: CS7038 bij DLL-uitvoer
 
-Bij een eerste echte lokale compileerpoging op Windows meldde de .NET-compiler CS0012/CS0103: `UnityEngine.TextAnchor` in `ShiftHudBehaviour.cs` is gedefinieerd in `UnityEngine.TextRenderingModule.dll`. Die module bestaat in de originele door de gebruiker gedeelde Playrooms-interopset (161 DLL's), maar ontbrak als `Reference` in het C#-project.
+De tweede echte Windows-compile liep niet meer vast op de ontbrekende typeverwijzing, maar op `CSC error CS7038: Failed to emit module ComfortShiftHUD; Unable to determine specific cause of the failure`. Dit is een **compiler-/metadata-uitvoerfout**, niet een melding dat de mod al geïnstalleerd of getest is.
 
-De projectreferentie en de bestandcontrole in `install-comfort-shift-hud.ps1` zijn toegevoegd. Voor deze correctie hoeft geen nieuwe metadata- of interopgeneratie te worden uitgevoerd; pak de meest recente PlayroomsMods-repository uit en draai opnieuw de normale installatiestap. **Een succesvolle nieuwe lokale .NET-build moet nog worden bevestigd.**
+De eerder toegevoegde `UnityEngine.TextRenderingModule.dll`-referentie en het enige gebruik van `TextAnchor.MiddleCenter` zijn daarom verwijderd. De END DAY-tekst wordt nu met `GUIStyle.CalcSize(new GUIContent(...))` gecentreerd, alleen met de reeds gebruikte Core- en IMGUI-wrappers. Dit vermijdt de extra door Il2CppInterop gegenereerde assembly als C#-builddependency.
+
+Verder schakelt het project het produceren van losse reference-assemblies, PDB's en gedeelde compilerprocessen uit. Mocht de build nog steeds falen, dan maakt het installatiescript automatisch **ComfortShiftHUD/build-diagnostic.log** in de uitgepakte repository. Dit bevat ook lokale gebruikerspaden en moet vóór het delen worden gecontroleerd. Geen logbestand wordt naar GitHub gestuurd; het staat in .gitignore.
+
+**De oorzaak van CS7038 is hiermee nog niet definitief bewezen.** De nieuwe buildroute is een gerichte mitigatie. De lokale compile moet opnieuw worden uitgevoerd voordat er geclaimd wordt dat deze fout is opgelost. Er hoeven geen bestaande game-interop-DLL's opnieuw gegenereerd te worden.
 
 ## Bouwen en installeren op Windows
 
