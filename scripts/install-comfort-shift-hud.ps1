@@ -27,7 +27,7 @@ Need (Test-Path -LiteralPath $patcher) 'Unity 6000.6-preloaderpatcher ontbreekt.
 foreach ($required in @('BepInEx.Core.dll','BepInEx.Unity.IL2CPP.dll','Il2CppInterop.Runtime.dll','0Harmony.dll')) {
     Need (Test-Path -LiteralPath (Join-Path $core $required)) "BepInEx kernbestand ontbreekt: $required"
 }
-foreach ($required in @('Il2Cppmscorlib.dll','Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll')) {
+foreach ($required in @('Il2Cppmscorlib.dll','Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.TextRenderingModule.dll')) {
     Need (Test-Path -LiteralPath (Join-Path $interop $required)) "Unity-interop ontbreekt: $required"
 }
 $interopCount = @(Get-ChildItem -LiteralPath $interop -File -Filter '*.dll').Count
