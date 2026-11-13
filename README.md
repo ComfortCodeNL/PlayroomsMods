@@ -9,6 +9,30 @@ De nieuwe mod toont resterende ballen in de huidige kamer, tijd tot het einde va
 ---
 # Playrooms Co-op + New Game+
 
+## ComfortCode-uitbreiding: Comfort Shift HUD 0.1.0
+
+Naast de originele Playrooms Co-op en New Game+ bevat deze repository nu **Comfort Shift HUD**, een volledig afzonderlijke BepInEx 6 IL2CPP-plugin. Deze uitbreiding:
+
+- Toont **resterende ballen / totaal in de kamer waar je daadwerkelijk staat** (RoomService.PlayerRoom);
+- Toont de **tijd tot het einde van de shift** (DayTimeService.RemainingTime);
+- Toont **het aantal en de RoomId's van al opgeruimde, momenteel geladen kamers**;
+- Toont groot **END DAY** wanneer de shift is afgelopen;
+- Probeert via een afzonderlijk, uit te schakelen nachtlicht-hook het **licht aan te houden**, zonder de shiftklok of de saves te veranderen.
+
+De nieuwe HUD heeft geen F8/F9/F10-toetsbindingen en kan naast de originele mods draaien. Er wordt geen originele co-op- of NG+-code in onze nieuwe plugin gekopieerd. De broncode van de oorspronkelijke mods blijft voor hun oorspronkelijke auteur(s); alleen de nieuwe HUD staat onder de MIT-licentie in ComfortShiftHUD/LICENSE.
+
+**Status:** alleen de nieuwe eigen pluginbron is geïmplementeerd. De .NET-build, het feitelijke lichteffect en de gameclient-/co-optest moeten nog worden bevestigd. Niet presenteren als een getest werkende release.
+
+**Lees [ComfortShiftHUD/README.md](ComfortShiftHUD/README.md)** voor de volledige technische uitleg, installatie, beperkingen en rollback.
+
+**Snel installeren vanuit de ZIP in de PlayroomsMods-repositorymap (Playrooms afgesloten):**
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-comfort-shift-hud.ps1 -GameDirectory "C:\Program Files (x86)\Steam\steamapps\common\Playrooms" -Apply
+
+De standaardproefrun zonder -Apply bouwt alleen en wijzigt de spelinstallatie niet. De installatie gebruikt je **bestaande** Playrooms-patcher en interop-DLL's; ze herinstalleert of verwijdert geen van de bestaande mods.
+
+---
+
 Two mods for [Playrooms](https://store.steampowered.com/app/5037510/Playrooms/), hosted together for now:
 
 - **Playrooms Co-op 1.1.7**: online co-op for up to 4 players over Steam. Shared balls, brooms, pits, money, upgrades and more. Press **F8** to open the menu and invite others.
