@@ -1,0 +1,32 @@
+name: Comfort Shift HUD source checks
+on:
+  push:
+    paths:
+      - "ComfortShiftHUD/**"
+      - "scripts/install-comfort-shift-hud.ps1"
+      - "scripts/rollback-comfort-shift-hud.ps1"
+      - "scripts/verify-comfort-shift-hud.ps1"
+      - ".github/workflows/comfort-shift-hud-source.yml"
+  pull_request:
+    paths:
+      - "ComfortShiftHUD/**"
+      - "scripts/install-comfort-shift-hud.ps1"
+      - "scripts/rollback-comfort-shift-hud.ps1"
+      - "scripts/verify-comfort-shift-hud.ps1"
+      - ".github/workflows/comfort-shift-hud-source.yml"
+jobs:
+  static-source-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent-source regression checks
+        run: python3 -m unittest discover -s ComfortShiftHUD/tests -v
+      - name: Check for accidental binary files
+        run: |
+          if find ComfortShiftHUD -type f \( -name '*.dll' -o -name '*.exe' -o -name '*.pdb' \) | grep .; then
+            echo "Do not redistribute game, BepInEx or compiled binaries in source." >&2
+            exit 1
+          fi
+          echo "No compiled assemblies committed."
