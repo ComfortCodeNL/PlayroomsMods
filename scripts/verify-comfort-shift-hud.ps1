@@ -29,21 +29,28 @@ $lines = @(Get-Content -LiteralPath $log -Tail 3000)
 $loaded = @($lines | Where-Object { $_ -match 'Comfort Shift HUD\s+0\.1\.0 loaded' }).Count -gt 0
 $update = @($lines | Where-Object { $_ -match '\[ShiftHUD\] Unity Update callback active' }).Count -gt 0
 $gui = @($lines | Where-Object { $_ -match '\[ShiftHUD\] Unity OnGUI callback active' }).Count -gt 0
+$rendered = @($lines | Where-Object { $_ -match '\[ShiftHUD\] HUD frame rendered without exception' }).Count -gt 0
+$drawError = @($lines | Where-Object { $_ -match '\[ShiftHUD\].*HUD drawing failed at stage' -or $_ -match 'Method unstripping failed' } | Select-Object -Last 5)
 $hook = @($lines | Where-Object { $_ -match '\[ShiftHUD\] Lighting interception installed' }).Count -gt 0
 $night = @($lines | Where-Object { $_ -match '\[ShiftHUD\] Night lighting transition suppressed' }).Count -gt 0
 $errors = @($lines | Where-Object { $_ -match '(?i)\[ShiftHUD\].*(Warning|error|failed|unavailable|Unexpected|missing)' } | Select-Object -Last 12)
 Write-Host ('BepInEx-plugin-load: ' + $loaded)
 Write-Host ('Unity Update callback: ' + $update)
 Write-Host ('Unity OnGUI callback: ' + $gui)
+Write-Host ('HUD frame zonder uitzondering getekend: ' + $rendered)
+if ($drawError.Count -gt 0) {
+    Write-Warning 'Tekenfouten aangetroffen in de huidige game-log:'
+    foreach ($line in $drawError) { Write-Host $line }
+}
 Write-Host ('Nachtlicht-hook geinstalleerd: ' + $hook)
 Write-Host ('Nachtlichttransitie werkelijk onderschept: ' + $night)
 if ($errors.Count -gt 0) {
     Write-Warning 'Mogelijke HUD/lichteffectproblemen in BepInEx-log:'
     foreach ($line in $errors) { Write-Host $line }
 }
-if (-not $loaded -or -not $update -or -not $gui) {
-    Write-Warning 'Niet alle runtime callbacks zijn bevestigd. Dit is geen geslaagde game-test.'
+if (-not $loaded -or -not $update -or -not $gui -or -not $rendered) {
+    Write-Warning 'Plugin, Unity callbacks of een werkelijk getekend HUD-frame zijn niet allemaal bevestigd.'
     exit 2
 }
-Write-Host 'De HUD-plugin en callbacks zijn geladen.' -ForegroundColor Green
+Write-Host 'HUD-plugin, Unity callbacks en een daadwerkelijk getekend HUD-frame zijn bevestigd.' -ForegroundColor Green
 Write-Warning 'Ballen, timer, kamers, END DAY en daadwerkelijk brandend licht zijn nog NIET in-game gevalideerd.'
