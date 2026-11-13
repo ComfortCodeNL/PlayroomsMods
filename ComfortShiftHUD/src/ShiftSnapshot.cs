@@ -16,6 +16,8 @@ namespace ComfortCode.Playrooms.ShiftHud
         internal readonly List<string> CompletedNames = new List<string>();
         internal bool ShiftKnown;
         internal bool ShiftEnded;
+        // Only the current playable shift, never night/dawn/new-day screens.
+        internal bool FinalTenSeconds;
         internal int CurrentDay = -1;
         internal int RemainingSeconds = -1;
 
@@ -97,7 +99,12 @@ namespace ComfortCode.Playrooms.ShiftHud
             {
                 float remaining = GameBridge.Float(day, "RemainingTime");
                 if (phase == 0 && !float.IsNaN(remaining) && !float.IsInfinity(remaining))
+                {
+                    // This is only a warning. Do not alter _phase, _timer,
+                    // RemainingTime, light system, ball spots or player input.
+                    result.FinalTenSeconds = remaining > 0f && remaining <= 10f;
                     result.RemainingSeconds = Math.Max(0, Math.Min(86400, (int)Math.Ceiling(remaining)));
+                }
                 else if (result.ShiftEnded)
                     result.RemainingSeconds = 0;
             }

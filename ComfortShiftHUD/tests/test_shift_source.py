@@ -33,22 +33,49 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn("result.CompletedCount++", text)
         self.assertIn("result.CurrentRemaining = remaining;", text)
 
-    def test_light_hook_is_fail_open_and_does_not_edit_clock(self):
-        text = read("ComfortShiftHUD/src/NightLightKeeper.cs")
-        self.assertIn('OnDayTimeChanged', text)
-        self.assertIn('KeepLightsOn.Value', text)
-        self.assertIn('if (phase != 1) return true;', text)
-        self.assertIn('return false;', text)
-        self.assertIn('catch (Exception e)', text)
-        self.assertNotIn('"_timer"', text)
-        self.assertNotIn('WakeUp(', text)
-        self.assertNotIn('EnterPhase(', text)
-        self.assertNotIn('RenderSettings', text)
-        self.assertNotIn('GameAssembly.dll', text)
+    def test_natural_night_lighting_not_blocked(self):
+        self.assertFalse((HUD / "src" / "NightLightKeeper.cs").exists())
+        ui = read("ComfortShiftHUD/src/ShiftHudBehaviour.cs")
+        plugin = read("ComfortShiftHUD/src/Plugin.cs")
+        self.assertNotIn("NightLightKeeper.TryInstall", ui)
+        self.assertNotIn("KeepLightsAfterShift", plugin)
+        self.assertNotIn("LightSystemService", ui)
+        self.assertNotIn('"_timer"', ui)
+        self.assertNotIn('"_phase"', ui)
 
-    def test_hud_visible_without_room_and_end_day_text(self):
+    def test_final_ten_seconds_are_the_only_warning_period(self):
+        state = read("ComfortShiftHUD/src/ShiftSnapshot.cs")
+        ui = read("ComfortShiftHUD/src/ShiftHudBehaviour.cs")
+        self.assertIn("remaining > 0f && remaining <= 10f", state)
+        self.assertIn("if (phase == 0", state)
+        self.assertIn("result.FinalTenSeconds = ", state)
+        self.assertIn("if (_snapshot.FinalTenSeconds)", ui)
+        self.assertNotIn("if (_snapshot.ShiftEnded)", ui)
+        self.assertIn("END GAME", ui)
+        self.assertNotIn("END DAY", ui)
+
+    def test_requested_shortcuts_use_real_services_and_ids(self):
+        code = read("ComfortShiftHUD/src/CheatHotkeys.cs")
+        self.assertIn("GetAsyncKeyState", code)
+        self.assertIn("GetForegroundWindow", code)
+        self.assertIn("0x34 + i", code)
+        self.assertIn("HandVacuumPurchaseStatistic", code)
+        self.assertIn("EquipToolForStatistic", code)
+        self.assertIn("SaveData", code)
+        self.assertIn("ReplayUnlockedSkills", code)
+        self.assertIn('CurrencyId = "balls"', code)
+        self.assertIn("TenThousandEurosCents = 1000000", code)
+        self.assertIn("GrantCurrency", code)
+        for key in ("PlayroomLeft1", "PlayroomLeft2", "PlayroomLeft3",
+                    "PlayroomRight1", "PlayroomRight2", "PlayroomRight3"):
+            self.assertIn(key, code)
+        self.assertIn("DoorKeyIds", code)
+        self.assertIn("SetStatistic", code)
+        self.assertNotIn("GameAssembly.dll", code)
+
+    def test_hud_visible_without_room_and_end_game_warning(self):
         text = read("ComfortShiftHUD/src/ShiftHudBehaviour.cs")
-        self.assertIn("END DAY", text)
+        self.assertIn("END GAME", text)
         self.assertIn("Ballen over:", text)
         self.assertIn("Shift eindigt over:", text)
         self.assertIn("Kamers opgeruimd:", text)

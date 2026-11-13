@@ -1,35 +1,27 @@
 # ComfortCode PlayroomsMods fork
 
-Deze fork bevat de originele bronbestanden van **TheWildLeon/PlayroomsCoopMod** en daarnaast een **nieuwe, afzonderlijke ComfortCode-plugin: [Comfort Shift HUD](PlayroomsShiftHUD/README.md)**.
+De originele broncode van TheWildLeon/PlayroomsCoopMod staat hier samen met ComfortCode-uitbreidingen.
 
-De nieuwe mod toont resterende ballen in de huidige kamer, tijd tot het einde van de shift, aantal en namen van volledig opgeruimde kamers en een END DAY-banner. Bij shifteinde creëert hij optioneel lokaal werklicht, zonder de dagklok, co-op-synchronisatie of saves te veranderen. De originele PlayroomsCoop en New Game+ blijven onveranderd.
+## Aanbevolen HUD: ComfortShiftHUD
 
-**Installatie:** de nieuwe mod wordt vanuit de eigen broncode op de Windows-pc gebouwd met de al werkende Unity 6000.6 BepInEx-patcher en bestaande IL2CPP-interop. Gebruik scripts/install-shift-hud.ps1 (eerst zonder -Apply; daarna met -Apply). Er is nog **geen** bevestigde echte Windows-/Unity-clienttest van deze mod. De originele release-ZIP's van TheWildLeon bevatten deze nieuwe plugin niet automatisch.
+**[Comfort Shift HUD](ComfortShiftHUD/README.md)** is de actuele, zelfstandige HUD-plugin, met vier statistieken/acties:
 
----
-# Playrooms Co-op + New Game+
+- Ballen in je huidige kamer, resterende shifttijd en voltooide kamers met namen.
+- **END GAME** uitsluitend tijdens de laatste 10 seconden vóór het shifteinde. Daarna gaat het volgens de originele Playrooms-regels **donker**, maar kun je ballen blijven verzamelen.
+- ALT+4: beste beschikbare handstofzuiger en bijbehorende upgrades.
+- ALT+5: alle skills naar hun maximale niveau.
+- ALT+6: **€10.000 bijschrijven**.
+- ALT+7: **alle zes kamersleutels**.
 
-## ComfortCode-uitbreiding: Comfort Shift HUD 0.1.0
+**Installeer niet tegelijk de oude alternatieve PlayroomsShiftHUD-plugin.** Die heeft dezelfde plugin-GUID en nog een verouderde lichtfunctie. Gebruik scripts/install-comfort-shift-hud.ps1, niet scripts/install-shift-hud.ps1.
 
-Naast de originele Playrooms Co-op en New Game+ bevat deze repository nu **Comfort Shift HUD**, een volledig afzonderlijke BepInEx 6 IL2CPP-plugin. Deze uitbreiding:
+De cheats veranderen je actieve gameprogressie. Maak vooraf een saveback-up en test bij voorkeur solo. De exacte gameplaywerking is nog niet met de nieuwste gameclientversie bevestigd.
 
-- Toont **resterende ballen / totaal in de kamer waar je daadwerkelijk staat** (RoomService.PlayerRoom);
-- Toont de **tijd tot het einde van de shift** (DayTimeService.RemainingTime);
-- Toont **het aantal en de RoomId's van al opgeruimde, momenteel geladen kamers**;
-- Toont groot **END DAY** wanneer de shift is afgelopen;
-- Probeert via een afzonderlijk, uit te schakelen nachtlicht-hook het **licht aan te houden**, zonder de shiftklok of de saves te veranderen.
-
-De nieuwe HUD heeft geen F8/F9/F10-toetsbindingen en kan naast de originele mods draaien. Er wordt geen originele co-op- of NG+-code in onze nieuwe plugin gekopieerd. De broncode van de oorspronkelijke mods blijft voor hun oorspronkelijke auteur(s); alleen de nieuwe HUD staat onder de MIT-licentie in ComfortShiftHUD/LICENSE.
-
-**Status:** alleen de nieuwe eigen pluginbron is geïmplementeerd. De .NET-build, het feitelijke lichteffect en de gameclient-/co-optest moeten nog worden bevestigd. Niet presenteren als een getest werkende release.
-
-**Lees [ComfortShiftHUD/README.md](ComfortShiftHUD/README.md)** voor de volledige technische uitleg, installatie, beperkingen en rollback.
-
-**Snel installeren vanuit de ZIP in de PlayroomsMods-repositorymap (Playrooms afgesloten):**
+**Installatie vanuit de nieuwe ZIP met Playrooms afgesloten:**
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-comfort-shift-hud.ps1 -GameDirectory "C:\Program Files (x86)\Steam\steamapps\common\Playrooms" -Apply
 
-De standaardproefrun zonder -Apply bouwt alleen en wijzigt de spelinstallatie niet. De installatie gebruikt je **bestaande** Playrooms-patcher en interop-DLL's; ze herinstalleert of verwijdert geen van de bestaande mods.
+De installer bouwt tegen de bestaande BepInEx + IL2CPP-interop van de gebruiker, maakt een backup van de vorige HUD-DLL en laat TheWildLeon's co-op, NG+, game, patcher, andere mods en saves ongemoeid.
 
 ---
 
