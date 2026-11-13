@@ -24,6 +24,14 @@ namespace ComfortCode.Playrooms.ShiftHud
             var result = new ShiftSnapshot();
             var byId = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+            // Prefer RoomService.Rooms, which includes tracked but potentially
+            // inactive rooms, then supplement with active scene RoomObjects.
+            foreach (var room in GameBridge.ServiceRooms())
+            {
+                var id = GameBridge.RoomId(room);
+                if (string.IsNullOrWhiteSpace(id) || byId.ContainsKey(id)) continue;
+                byId[id] = room;
+            }
             foreach (var room in GameBridge.FindAll("TwoPixels.Room.RoomObject"))
             {
                 var id = GameBridge.RoomId(room);
