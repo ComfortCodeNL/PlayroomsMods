@@ -27,7 +27,7 @@ Need (Test-Path -LiteralPath $patcher) 'Unity 6000.6-preloaderpatcher ontbreekt.
 foreach ($required in @('BepInEx.Core.dll','BepInEx.Unity.IL2CPP.dll','Il2CppInterop.Runtime.dll','0Harmony.dll')) {
     Need (Test-Path -LiteralPath (Join-Path $core $required)) "BepInEx kernbestand ontbreekt: $required"
 }
-foreach ($required in @('Il2Cppmscorlib.dll','Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll','UnityEngine.TextRenderingModule.dll')) {
+foreach ($required in @('Il2Cppmscorlib.dll','Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.IMGUIModule.dll')) {
     Need (Test-Path -LiteralPath (Join-Path $interop $required)) "Unity-interop ontbreekt: $required"
 }
 $interopCount = @(Get-ChildItem -LiteralPath $interop -File -Filter '*.dll').Count
@@ -41,8 +41,21 @@ Need ($LASTEXITCODE -eq 0 -and @($sdks | Where-Object { $_ -match '^(8|9|1[0-9])
 Info 'Bouwt alleen onze losse HUD-plugin tegen bestaande IL2CPP-assemblies...'
 & $dotnet.Source restore $project "-p:GameDir=$game"
 Need ($LASTEXITCODE -eq 0) 'dotnet restore mislukt. Geen spelbestanden gewijzigd.'
-& $dotnet.Source build $project -c Release --no-restore "-p:GameDir=$game"
-Need ($LASTEXITCODE -eq 0) 'dotnet build mislukt. Geen spelbestanden gewijzigd.'
+& $dotnet.Source build $project -c Release --no-restore "-p:GameDir=$game" "-p:ProduceReferenceAssembly=false" "-p:DebugType=none" "-p:DebugSymbols=false" "-p:UseSharedCompilation=false"
+if ($LASTEXITCODE -ne 0) {
+    # CS7038 can hide malformed generated metadata without a source line.
+    # A second, diagnostic-only attempt records the underlying compiler detail
+    # outside the game directory; it does NOT install anything.
+    $diagnostics = Join-Path $repo 'ComfortShiftHUD\build-diagnostic.log'
+    Write-Warning "Compilation failed; collecting verbose build diagnostics: $diagnostics"
+    $previousEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $dotnet.Source build $project -c Release --no-restore "-p:GameDir=$game" "-p:ProduceReferenceAssembly=false" "-p:DebugType=none" "-p:DebugSymbols=false" "-p:UseSharedCompilation=false" -v:diag *> $diagnostics
+    }
+    finally { $ErrorActionPreference = $previousEap }
+    throw "dotnet build mislukt. Geen spelbestanden gewijzigd. Diagnose: $diagnostics (controleer privepaden voor delen)."
+}
 Need (Test-Path -LiteralPath $compiled) 'Build meldde succes maar ComfortShiftHUD.dll is niet gevonden.'
 Need ((Get-Item -LiteralPath $compiled).Length -gt 4096) 'ComfortShiftHUD.dll is onverwacht klein.'
 $hash = (Get-FileHash -LiteralPath $compiled -Algorithm SHA256).Hash
