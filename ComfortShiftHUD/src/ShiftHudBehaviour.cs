@@ -53,7 +53,7 @@ namespace ComfortCode.Playrooms.ShiftHud
                 _title = new GUIStyle(GUI.skin.label) { fontSize = 18, richText = true };
                 _normal = new GUIStyle(GUI.skin.label) { fontSize = 15, richText = true };
                 _small = new GUIStyle(GUI.skin.label) { fontSize = 12, richText = true };
-                _large = new GUIStyle(GUI.skin.label) { fontSize = 35, richText = true, alignment = TextAnchor.MiddleCenter };
+                _large = new GUIStyle(GUI.skin.label) { fontSize = 35, richText = true };
             }
 
             float width = Mathf.Min(400f, Screen.width - 30f);
@@ -106,7 +106,11 @@ namespace ComfortCode.Playrooms.ShiftHud
                 GUI.color = new Color(0.04f, 0.05f, 0.09f, 0.90f);
                 GUI.DrawTexture(new Rect(bx, by, w, 78f), Texture2D.whiteTexture);
                 GUI.color = prev;
-                GUI.Label(new Rect(bx + 8f, by + 8f, w - 16f, 60f),
+                // Center without referencing UnityEngine.TextRenderingModule.TextAnchor.
+                // Some generated IL2CPP wrappers fail during Roslyn's emit stage.
+                const string caption = "END DAY";
+                float textWidth = Mathf.Min(w - 16f, _large.CalcSize(new GUIContent(caption)).x + 20f);
+                GUI.Label(new Rect(bx + (w - textWidth) * 0.5f, by + 8f, textWidth, 60f),
                     "<b><color=#FFE48C>END DAY</color></b>", _large);
             }
             GUI.color = prev;
