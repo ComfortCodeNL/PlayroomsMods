@@ -1,4 +1,4 @@
-Playrooms Co-op 1.1.4 and Playrooms New Game Plus 1.2.3 source.
+Playrooms Co-op 1.1.7 and Playrooms New Game Plus 1.2.3 source.
 
 Both mods
   Put the BepInEx core and interop assemblies for Playrooms in a "refs" folder at the top of this repo

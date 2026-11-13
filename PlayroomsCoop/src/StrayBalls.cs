@@ -22,7 +22,8 @@ namespace PlayroomsCoop
         private static IntPtr _strayWorld;
         private static readonly List<(string room, int idx, object spot, Vector3 to)> _strayFound = new List<(string, int, object, Vector3)>();
         private static bool _strayFilling;
-        private static int _strayCursor, _strayChecked, _strayNoMesh, _strayLastDay = -1;
+        private static int _strayCursor, _strayChecked, _strayNoMesh, _strayIslands, _strayLastDay = -1;
+        private static string _strayRoomRequest;
         private static float _nextStrayPass = 10f;
         private static readonly System.Random _strayRng = new System.Random();
 
@@ -143,6 +144,7 @@ namespace PlayroomsCoop
             {
                 _strayWorld = world; _strayScan.Clear(); _strayFound.Clear(); _strayRecheck.Clear(); _strayOk.Clear();
                 _gather.Clear(); _strayFilling = false; _nextStrayPass = now + 8f; _strayLastDay = -1; _strayRetries = 0;
+                _navVertCount = -1; _navTris = null; _navVerts = null; _parts.Clear(); _strayRoomRequest = null;
                 return;
             }
 
@@ -157,7 +159,14 @@ namespace PlayroomsCoop
                 if (idx >= 0) { CheckStray(R.Get<string>(room, "RoomId"), idx, spot, true); budget--; }
             }
 
+            MarkVisitedTick(now);
             if (_strayFilling) { GatherSome(1500); return; }
+            if (_strayScan.Count == 0 && _strayRoomRequest != null)
+            {
+                string only = _strayRoomRequest; _strayRoomRequest = null;
+                BeginStrayPass(only);
+                return;
+            }
             if (_strayScan.Count == 0)
             {
                 int day = -1;
@@ -181,10 +190,17 @@ namespace PlayroomsCoop
         private static readonly List<(string id, object room)> _gather = new List<(string, object)>();
         private static int _gatherRoom, _gatherSpot, _strayRetries;
 
-        private static void BeginStrayPass()
+        private static void BeginStrayPass(string onlyRoom = null)
         {
+            RefreshIslands();
             _strayScan.Clear(); _strayFound.Clear(); _gather.Clear();
-            _strayCursor = 0; _strayChecked = 0; _strayNoMesh = 0; _gatherRoom = 0; _gatherSpot = 0;
+            _strayCursor = 0; _strayChecked = 0; _strayNoMesh = 0; _strayIslands = 0; _gatherRoom = 0; _gatherSpot = 0;
+            if (onlyRoom != null)
+            {
+                if (_rooms.TryGetValue(onlyRoom, out var only) && Alive(only)) _gather.Add((onlyRoom, only));
+                _strayFilling = true;
+                return;
+            }
             var ids = new List<string>(_rooms.Keys); ids.Sort(StringComparer.Ordinal);
             var players = _connected ? Net.WorkSplit() : new List<ulong> { Net.Me };
             for (int i = 0; i < ids.Count; i++)
@@ -230,7 +246,9 @@ namespace PlayroomsCoop
             if (inst != null && SafeBool(inst, "IsActive") && Speed2(inst) > 0.01f) return;
             Vector3 p = inst != null && SafeBool(inst, "IsActive") ? ((Component)inst).transform.position : (Vector3)R.Get(spot, "Position");
             _strayChecked++;
-            if (InBounds(p, out var nav)) { _strayOk[R.Ptr(spot)] = (Vector3)R.Get(spot, "Position"); return; }
+            bool inBounds = InBounds(p, out var nav);
+            if (nav.HasValue && !NearBaked(spot, p) && OnRaisedIsland(nav.Value, out var playTo) && playTo.HasValue) { inBounds = false; nav = playTo; _strayIslands++; }
+            if (inBounds) { _strayOk[R.Ptr(spot)] = (Vector3)R.Get(spot, "Position"); return; }
             if (nav == null) { _strayNoMesh++; return; }
             var to = nav.Value + new Vector3((float)(_strayRng.NextDouble() - 0.5) * 0.6f, _ballR + 0.05f, (float)(_strayRng.NextDouble() - 0.5) * 0.6f);
             if (immediate) MoveStray(room, idx, to);
@@ -255,7 +273,7 @@ namespace PlayroomsCoop
                 _strayFound.Clear(); return;
             }
             foreach (var f in _strayFound) MoveStray(f.room, f.idx, f.to);
-            if (_strayFound.Count > 0) Plugin.Log.LogInfo($"[Strays] moved {_strayFound.Count} out-of-bounds balls back into play (checked {n})");
+            if (_strayFound.Count > 0) Plugin.Log.LogInfo($"[Strays] moved {_strayFound.Count} out-of-bounds balls back into play, {_strayIslands} of them from cut-off spots (checked {n})");
             _strayFound.Clear();
         }
 
@@ -264,6 +282,18 @@ namespace PlayroomsCoop
             ApplyMove(room, idx, to);
             if (_connected) _outMoved.Add((room, idx, to));
             var spot = SpotAt(room, idx); if (spot != null) _strayOk[R.Ptr(spot)] = to;
+        }
+
+        private static bool NearBaked(object spot, Vector3 p)
+        {
+            try { return Dist((Vector3)R.Get(spot, "BakedPosition"), p) < 0.3f; }
+            catch { return true; }
+        }
+
+        internal static void RequestStrayRoomPass(object room)
+        {
+            if (!Strays.Enabled || room == null) return;
+            try { _strayRoomRequest = R.Get<string>(room, "RoomId"); } catch { }
         }
 
         private static void QueueStrayCheck(object spot)

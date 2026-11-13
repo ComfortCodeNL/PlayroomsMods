@@ -156,7 +156,7 @@ internal static class Ui
 
         float x = left + 20f, y = top + 14f;
         GUI.Label(new Rect(x, y, 600f, 34f), "<b><color=" + Gold + ">" + Label(_pick.Cycle).Replace("NG+", "NEW GAME+") + "</color></b>", _big);
-        GUI.Label(new Rect(x, y + 32f, 680f, 22f), $"From slot {_pick.Slot + 1} into slot {_pick.Target + 1}. Your collectables, Lexi and the terminal programs always come along.", _small);
+        GUI.Label(new Rect(x, y + 32f, 680f, 22f), (_pick.Target == _pick.Slot ? $"Replaces slot {_pick.Slot + 1} (no empty slot). " : $"From slot {_pick.Slot + 1} into slot {_pick.Target + 1}. ") + "Your collectables, Lexi and the terminal programs always come along.", _small);
 
         y += 66f;
         GUI.Label(new Rect(x, y, 600f, 24f), "<b>How do you want to replay?</b>", _text);
@@ -261,6 +261,8 @@ internal static class Ui
         return _endShown;
     }
 
+    public const string NoSlotText = "No empty save slot for New Game+. Delete a slot in the main menu first, or start it from an NG+ save to replace that one.";
+
     private static void DrawEndOffer(int w)
     {
         int next = NewGamePlus.ActiveCycle + 1;
@@ -268,7 +270,7 @@ internal static class Ui
         Panel(new Rect(left, 24f, 410f, 150f));
         GUI.Label(new Rect(left + 16f, 34f, 380f, 30f), "<b><color=" + Gold + ">" + Label(next).Replace("NG+", "NEW GAME+") + " unlocked</color></b>", _big);
         GUI.Label(new Rect(left + 16f, 66f, 380f, 44f),
-            "Replay in a new world in the next empty slot:\nSimple, SpeedRun or Balance Patch.", _small);
+            NewGamePlus.ActiveCycle > 0 ? "Replay in a new world in the next empty slot, or over\nthis NG+ save if none is free. Simple, SpeedRun or Balance Patch." : "Replay in a new world in the next empty slot:\nSimple, SpeedRun or Balance Patch.", _small);
         if (Coop.IsClient)
         {
             GUI.Label(new Rect(left + 16f, 126f, 378f, 30f), "<b>In co-op, the host starts New Game+ for both of you.</b>", _small);
@@ -279,10 +281,10 @@ internal static class Ui
             Feature.Try(() =>
             {
                 int src = NewGamePlus.CurrentSlot >= 0 ? NewGamePlus.CurrentSlot : Game.ContinueSlot();
-                int target = NewGamePlus.TargetFor(src);
+                int target = NewGamePlus.TargetFor(src, Game.StatDict());
                 if (target < 0)
                 {
-                    Notify("No empty save slot for New Game+. Delete a slot in the main menu first.", 8f);
+                    Notify(NoSlotText, 8f);
                     return;
                 }
                 OpenOptions(new Pick { Slot = src, Cycle = next, Target = target, Stats = Game.StatDict(), FromEnd = true });
@@ -321,7 +323,7 @@ internal static class Ui
                 }
                 if (info.Completed || info.Cycle > 0)
                 {
-                    info.Target = NewGamePlus.TargetFor(i);
+                    info.Target = NewGamePlus.TargetFor(i, stats);
                     _slots.Add(info);
                 }
             }
@@ -363,7 +365,7 @@ internal static class Ui
             }
             else if (s.Completed)
             {
-                string into = s.Target >= 0 ? "into slot " + (s.Target + 1) : "no empty slot";
+                string into = s.Target < 0 ? "no empty slot" : s.Target == s.Slot ? "replacing this save" : "into slot " + (s.Target + 1);
                 GUI.Label(new Rect(left + 16f, y + 24f, 370f, 22f), "<size=12>Next: " + Label(s.Cycle + 1) + ", " + into + "</size>", _small);
                 if (s.Target >= 0 && !_busy && GUI.Button(new Rect(left + 390f, y + 6f, 176f, 36f), "<b>Start " + Label(s.Cycle + 1) + "</b>", _button))
                 {

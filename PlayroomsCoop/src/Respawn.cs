@@ -10,7 +10,11 @@ namespace PlayroomsCoop
         private static bool _localSafe, _sentSafe, _localDead;
         private static float _respawnAt = -1f, _respawnCooldownUntil, _nextSafeCheck, _followDeathAt = -1f;
         private static object _lockdown;
-        private const float JumpscareTime = 2.5f;
+        private const float MaxJumpscareTime = 15f, AfterScare = 0.3f, CheckHomeAfter = 6f;
+        private static volatile bool _scareDone;
+        private static Action _onScareDone;
+        private static object _scareDoneIl2Cpp;
+        private static float _checkHomeAt = -1f;
 
         private static void RespawnInit() => Respawn = new Feature("Respawn", Plugin.CoopRespawn.Value);
 
@@ -18,7 +22,7 @@ namespace PlayroomsCoop
         {
             foreach (var p in Net.Peers.Values) { p.Dead = false; p.Safe = false; }
             _localSafe = false; _sentSafe = false;
-            _respawnAt = -1f; _followDeathAt = -1f; _localDead = false;
+            _respawnAt = -1f; _followDeathAt = -1f; _localDead = false; _checkHomeAt = -1f; _scareDone = false;
         }
 
         private static object Lockdown()
@@ -48,9 +52,19 @@ namespace PlayroomsCoop
                 Plugin.Log.LogInfo($"[Respawn] caught with nobody safe (anyone alive: {alive}, anyone in the clean room: {safe}): normal death");
                 return true;
             }
-            try { if (playJumpscare != null) R.Call(playJumpscare, "Invoke", new object[] { null }); }
+            _scareDone = false;
+            bool played = false;
+            SetMovement(false);
+            try
+            {
+                if (playJumpscare != null)
+                {
+                    R.Call(playJumpscare, "Invoke", new object[] { ScareDoneCallback(playJumpscare) });
+                    played = true;
+                }
+            }
             catch (Exception e) { Plugin.Log.LogWarning("[Respawn] jumpscare: " + e.Message); }
-            _respawnAt = now + JumpscareTime;
+            _respawnAt = now + (played ? MaxJumpscareTime : 0.5f);
             Protocol.W.Begin(Msg.PlayerRespawned).SendAll(SteamNet.SendReliable);
             Plugin.Log.LogInfo("[Respawn] caught, someone else is safe: back to the clean room");
             result = false;
@@ -68,12 +82,28 @@ namespace PlayroomsCoop
         private static void RespawnTick(float now)
         {
             if (_followDeathAt >= 0f && now >= _followDeathAt) FollowPartnerDeath();
+            if (_respawnAt >= 0f && _scareDone) { _scareDone = false; _respawnAt = Math.Min(_respawnAt, now + AfterScare); }
             if (_respawnAt >= 0f && now >= _respawnAt)
             {
                 _respawnAt = -1f;
                 _respawnCooldownUntil = now + 8f;
+                _checkHomeAt = now + CheckHomeAfter;
                 BringHome();
                 CoopBehaviour.Notify("You were caught. Someone else is safe, so you're back in the clean room");
+            }
+            if (_checkHomeAt >= 0f && now >= _checkHomeAt)
+            {
+                _checkHomeAt = -1f;
+                var c = PlayerController();
+                bool moving = false;
+                try { moving = c != null && Convert.ToBoolean(R.Get(c, "MovementEnabled")); } catch { }
+                if (!moving)
+                {
+                    Plugin.Log.LogWarning("[Respawn] still frozen after coming home, giving control back");
+                    try { if (c != null) R.Call(c, "ResetToStartPosition"); } catch { }
+                    SetMovement(true);
+                    ClearFade();
+                }
             }
             if (now < _nextSafeCheck) return;
             _nextSafeCheck = now + 0.5f;
@@ -100,10 +130,57 @@ namespace PlayroomsCoop
             }
             try
             {
-                foreach (var c in R.FindAll(R.T("TwoPixels.Player.PlayerBehaviourController"))) { R.Call(c, "ResetToStartPosition"); break; }
+                var c = PlayerController();
+                if (c != null) R.Call(c, "ResetToStartPosition");
                 var es = EnemyService(); if (es != null) R.Call(es, "StandDownForNight");
             }
             catch (Exception e) { Plugin.Log.LogWarning("[Respawn] reset position: " + e.Message); }
+            SetMovement(true);
+            ClearFade();
+        }
+
+        private static object ScareDoneCallback(object playJumpscare)
+        {
+            if (_scareDoneIl2Cpp != null) return _scareDoneIl2Cpp;
+            try
+            {
+                var actionType = playJumpscare.GetType().GetMethod("Invoke").GetParameters()[0].ParameterType;
+                _onScareDone = () => _scareDone = true;
+                var support = Type.GetType("Il2CppInterop.Runtime.DelegateSupport, Il2CppInterop.Runtime", true);
+                var convert = support.GetMethod("ConvertDelegate").MakeGenericMethod(actionType);
+                _scareDoneIl2Cpp = convert.Invoke(null, new object[] { _onScareDone });
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("[Respawn] jumpscare callback: " + e.Message); }
+            return _scareDoneIl2Cpp;
+        }
+
+        private static object PlayerController()
+        {
+            try
+            {
+                var pp = R.GetStatic(R.T("TwoPixels.Player.PersistentPlayer"), "Instance");
+                if (pp != null) { var c = R.Get(pp, "PlayerBehaviourController"); if (c != null) return c; }
+            }
+            catch { }
+            foreach (var c in R.FindAll(R.T("TwoPixels.Player.PlayerBehaviourController"))) return c;
+            return null;
+        }
+
+        private static void SetMovement(bool on)
+        {
+            try
+            {
+                var c = PlayerController();
+                if (c == null) return;
+                if (on) R.Call(c, "EnableMovementBehavioursRpc");
+                else R.Call(c, "DisableMovementBehavioursRpc", true);
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("[Respawn] movement: " + e.Message); }
+        }
+
+        private static void ClearFade()
+        {
+            try { R.CallStatic(R.T("TwoPixels.Helper.ScreenFade"), "Clear"); } catch { }
         }
 
         private static void OnRespawnMessage(Msg type, byte[] buf, int len)

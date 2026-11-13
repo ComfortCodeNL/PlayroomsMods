@@ -72,7 +72,12 @@ internal static class NewGamePlus
 
     public static void Init() => LoadPending();
 
-    public static int TargetFor(int sourceSlot) => Game.NextEmptySlot(sourceSlot);
+    public static int TargetFor(int sourceSlot, object stats)
+    {
+        int empty = Game.NextEmptySlot(sourceSlot);
+        if (empty >= 0) return empty;
+        return sourceSlot >= 0 && CycleIn(stats) > 0 ? sourceSlot : -1;
+    }
 
     public static bool Begin(int sourceSlot, object stats, bool fromEndScreen, RunOptions options)
     {
@@ -81,10 +86,10 @@ internal static class NewGamePlus
             Ui.Notify("In co-op, only the host can start New Game+.", 6f);
             return false;
         }
-        int target = TargetFor(sourceSlot);
+        int target = TargetFor(sourceSlot, stats);
         if (target < 0)
         {
-            Ui.Notify("No empty save slot for New Game+. Delete a slot in the main menu first.", 8f);
+            Ui.Notify(Ui.NoSlotText, 8f);
             return false;
         }
         var p = new Pending
@@ -114,7 +119,7 @@ internal static class NewGamePlus
         }
         _pending = p;
         SavePending();
-        Plugin.Log.LogInfo((object)$"New Game+ {p.Cycle}: from slot {sourceSlot + 1} into slot {target + 1} ({Game.ModeName(p.Mode)}, {RunOptions.Name(p.Options.Mode)}, spooky {p.Options.Spooky}, tokens {p.Options.Tokens}, kit {p.Options.KitApplies}, {p.Collectables.Count} kept, {p.Skills.Count} upgrades, {p.Tools.Count} tools)");
+        Plugin.Log.LogInfo((object)$"New Game+ {p.Cycle}: from slot {sourceSlot + 1} into slot {target + 1}{(target == sourceSlot ? " (replacing it)" : "")} ({Game.ModeName(p.Mode)}, {RunOptions.Name(p.Options.Mode)}, spooky {p.Options.Spooky}, tokens {p.Options.Tokens}, kit {p.Options.KitApplies}, {p.Collectables.Count} kept, {p.Skills.Count} upgrades, {p.Tools.Count} tools)");
 
         if (fromEndScreen)
         {

@@ -239,6 +239,7 @@ namespace PlayroomsCoop
             ClientMenuCheck(now);
             ClockGate();
             ClockHold();
+            PausedClock(dt);
             World.Tick(now, dt);
             LagGuard.Tick(now, dt, _worldStarted && Net.Peers.Count > 0 && World.InGameWorld());
             CoopApi.Tick(now);
@@ -599,6 +600,24 @@ namespace PlayroomsCoop
                 if (wantPause) Notify("Clock paused: waiting for everyone to load in");
             }
             catch (Exception e) { Plugin.Log.LogWarning("Day clock hold: " + e.Message); _clockPausedByUs = false; }
+        }
+
+        private static bool _pauseClockLogged;
+
+        private void PausedClock(float dt)
+        {
+            if (_clockPausedByUs || !_worldStarted || !World.Alive(_dayService) || dt <= 0f || dt > 1f) return;
+            bool othersIn = false;
+            foreach (var p in Net.Peers.Values) if (p.InWorld) { othersIn = true; break; }
+            if (!othersIn) return;
+            try
+            {
+                if (Convert.ToSingle(R.GetStatic(typeof(Time), "timeScale")) > 0.01f) { _pauseClockLogged = false; return; }
+                if (!World.DayRunning(_dayService) || Convert.ToBoolean(R.Get(_dayService, "_paused"))) return;
+                R.Set(_dayService, "_timer", R.Get<float>(_dayService, "_timer") + dt);
+                if (!_pauseClockLogged) { _pauseClockLogged = true; Plugin.Log.LogInfo("[Day] game paused here, day clock keeps running for co-op"); }
+            }
+            catch { }
         }
 
         private static int _pinPhase;

@@ -347,7 +347,7 @@ namespace PlayroomsCoop
             return false;
         }
 
-        internal static void OnSaid(object robot, object clip, bool interrupt, bool said)
+        internal static void OnSaid(object robot, object clip, bool interrupt, bool subtitle, bool said)
         {
             if (!said || _replayingVoice || !_connected || !Feature.Enabled || clip == null) return;
             Feature.Try(() =>
@@ -357,7 +357,7 @@ namespace PlayroomsCoop
                 string name = ((UnityEngine.Object)clip).name;
                 if (string.IsNullOrEmpty(name)) return;
                 var w = Begin(Msg.RobotSay, o); w.Str(name); w.U8(interrupt ? (byte)1 : (byte)0);
-                w.F32(R.Get<float>(clip, "length"));
+                w.F32(R.Get<float>(clip, "length")); w.U8(subtitle ? (byte)1 : (byte)0);
                 w.SendAll(SteamNet.SendReliable);
             }, "send voice line");
         }
@@ -385,13 +385,13 @@ namespace PlayroomsCoop
             return _clips.TryGetValue(key, out c) ? c : null;
         }
 
-        private static void PlayLine(Obj o, string name, bool interrupt, float length)
+        private static void PlayLine(Obj o, string name, bool interrupt, float length, bool subtitle)
         {
             var clip = FindClip(name, length);
             if (clip == null) { Plugin.Log.LogWarning($"[Objects] robot voice line '{name}' not found here"); return; }
             var mi = o.Ref.GetType().GetMethod("SayClip");
             var ps = mi.GetParameters();
-            object sub = ps[2].ParameterType.IsValueType ? Activator.CreateInstance(ps[2].ParameterType) : null;
+            object sub = ps[2].ParameterType == typeof(bool) ? subtitle : (ps[2].ParameterType.IsValueType ? Activator.CreateInstance(ps[2].ParameterType) : null);
             _replayingVoice = true;
             try { mi.Invoke(o.Ref, new[] { clip, (object)interrupt, sub }); }
             finally { _replayingVoice = false; }
@@ -495,7 +495,8 @@ namespace PlayroomsCoop
                 case Msg.RobotSay:
                 {
                     string name = r.Str(); bool interrupt = r.U8() == 1; float length = r.F32();
-                    if (o.Kind == Kind.Robot && !o.Mine) Feature.Try(() => PlayLine(o, name, interrupt, length), "robot voice line");
+                    bool subtitle = r.Remaining > 0 ? r.U8() == 1 : true;
+                    if (o.Kind == Kind.Robot && !o.Mine) Feature.Try(() => PlayLine(o, name, interrupt, length, subtitle), "robot voice line");
                     break;
                 }
                 case Msg.ObjClaim:

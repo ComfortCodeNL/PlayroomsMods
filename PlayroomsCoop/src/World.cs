@@ -558,10 +558,10 @@ namespace PlayroomsCoop
         public static void ClaimOpenPairPrefix(object __instance) => World.OnClaimOpenPair(__instance);
         public static bool EquipToolPrefix() => Upgrades.OnEquipPurchasedTool();
         public static bool RobotSayPrefix(object __instance, ref bool __result) => Shared.OnSayPrefix(__instance, ref __result);
-        public static void RobotSayPostfix(object __instance, object clip, bool interrupt, bool __result) => Shared.OnSaid(__instance, clip, interrupt, __result);
+        public static void RobotSayPostfix(object __instance, object clip, bool interrupt, bool subtitle, bool __result) => Shared.OnSaid(__instance, clip, interrupt, subtitle, __result);
         public static bool UnstuckPrefix(object __instance) => World.OnUnstuckButton(__instance);
         public static void ResetBallsPrefix(object __0, out List<(int idx, Vector3 pos)> __state) => __state = World.BallSpotsBefore(__0);
-        public static void ResetBallsPostfix(object __0, List<(int idx, Vector3 pos)> __state) => World.SendResetBalls(__0, __state);
+        public static void ResetBallsPostfix(object __0, List<(int idx, Vector3 pos)> __state) { World.SendResetBalls(__0, __state); World.RequestStrayRoomPass(__0); }
         public static void DevicesHomePostfix(int __result) => World.SendDevicesHome(__result);
         public static bool RestartDayPrefix() => World.AllowRestartDay();
         public static void UnstuckCooldownPostfix(ref float __result) => World.OnUnstuckCooldown(ref __result);
