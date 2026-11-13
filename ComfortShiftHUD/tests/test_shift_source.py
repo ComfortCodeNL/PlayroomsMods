@@ -82,13 +82,17 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn("0Harmony.dll", project)
         self.assertIn("BepInEx.Unity.IL2CPP.dll", project)
         self.assertIn("UnityEngine.IMGUIModule.dll", project)
-        # GUIStyle.alignment and TextAnchor live in TextRenderingModule
-        # (confirmed by the actual CS0012 from a local Playrooms build).
-        self.assertIn('<Reference Include="UnityEngine.TextRenderingModule">', project)
-        self.assertIn("BepInEx/interop/UnityEngine.TextRenderingModule.dll", project)
-        self.assertIn("!Exists('$(GameDir)/BepInEx/interop/UnityEngine.TextRenderingModule.dll')", project)
-        self.assertIn("UnityEngine.TextRenderingModule.dll", read("scripts/install-comfort-shift-hud.ps1"))
-        self.assertIn("TextAnchor.MiddleCenter", read("ComfortShiftHUD/src/ShiftHudBehaviour.cs"))
+        # Do not require TextRenderingModule: extra IL2CPP metadata can cause
+        # Roslyn CS7038 during emit. Draw banner with IMGUI's CalcSize instead.
+        self.assertNotIn('UnityEngine.TextRenderingModule.dll', project)
+        self.assertNotIn('UnityEngine.TextRenderingModule.dll', read("scripts/install-comfort-shift-hud.ps1"))
+        ui = read("ComfortShiftHUD/src/ShiftHudBehaviour.cs")
+        self.assertNotIn("TextAnchor.MiddleCenter", ui)
+        self.assertIn("_large.CalcSize(new GUIContent(caption))", ui)
+        self.assertIn("bx + (w - textWidth) * 0.5f", ui)
+        self.assertIn("<ProduceReferenceAssembly>false</ProduceReferenceAssembly>", project)
+        self.assertIn("<DebugType>none</DebugType>", project)
+        self.assertIn("build-diagnostic.log", read("scripts/install-comfort-shift-hud.ps1"))
         self.assertNotIn("PlayroomsCoop.dll", project)
 
 if __name__ == "__main__":
