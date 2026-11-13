@@ -1,4 +1,4 @@
-# Comfort Shift HUD voor Playrooms
+# Comfort Shift HUD 0.1.1 voor Playrooms
 
 Zelfstandige BepInEx 6 Unity IL2CPP-plugin naast de originele PlayroomsCoop en New Game+. Installer wijzigt uitsluitend de eigen ComfortShiftHUD.dll en maakt eerst een backup.
 
@@ -47,7 +47,7 @@ Start Playrooms, laad je savegame en controleer of de HUD wordt getekend. Test d
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-comfort-shift-hud.ps1 -GameDirectory "C:\Program Files (x86)\Steam\steamapps\common\Playrooms"
 
-De verifier zoekt onder meer de logregels Comfort Shift HUD 0.1.0 loaded, Unity Update callback active, Unity OnGUI callback active, en HUD frame rendered without exception. Bij een renderfout staat de exacte tekenfase in het log. Elke ALT-actie logt een eigen resultaat of fout. De verifier bewijst nog niet dat alle gameplayeffecten correct zijn.
+De verifier zoekt onder meer de logregels Comfort Shift HUD 0.1.1 loaded, Unity Update callback active, Unity OnGUI callback active, en HUD frame rendered without exception. Bij een renderfout staat de exacte tekenfase in het log. Elke ALT-actie logt een eigen resultaat of fout. De verifier bewijst nog niet dat alle gameplayeffecten correct zijn.
 
 De volgende praktijktests zijn nog nodig: werkelijk aftellen van tien tot nul, natuurlijk donker worden, verder ballen rapen, uitrusten van de handstofzuiger, de skill-effecten, €10.000 bijschrijving en toegang door alle zes deuren.
 
