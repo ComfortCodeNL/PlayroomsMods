@@ -121,6 +121,35 @@ namespace ComfortCode.Playrooms.ShiftHud
         internal static string RoomId(object room)
             => String(room, "RoomId") ?? String(room, "roomId");
 
+        internal static IEnumerable<object> ServiceRooms()
+        {
+            // RoomService.Rooms is an Il2CppReferenceArray<RoomObject> in the
+            // verified Playrooms interop. It may include rooms not currently
+            // active in the scene, unlike a FindObjectsByType-only scan.
+            var service = First("TwoPixels.Room.RoomService");
+            if (service == null) yield break;
+            object rooms;
+            try { rooms = Read(service, "Rooms"); }
+            catch { yield break; }
+            if (rooms == null) yield break;
+            if (rooms is IEnumerable enumerable)
+            {
+                foreach (object room in enumerable) if (Alive(room)) yield return room;
+                yield break;
+            }
+            int count = Int(rooms, "Length", Int(rooms, "Count", 0));
+            if (count < 0 || count > 10000) yield break;
+            var getter = rooms.GetType().GetMethod("get_Item", Instance, null, new[] { typeof(int) }, null);
+            if (getter == null) yield break;
+            for (int i = 0; i < count; i++)
+            {
+                object room;
+                try { room = getter.Invoke(rooms, new object[] { i }); }
+                catch { continue; }
+                if (Alive(room)) yield return room;
+            }
+        }
+
         internal static object PlayerRoom()
         {
             var service = First("TwoPixels.Room.RoomService");
