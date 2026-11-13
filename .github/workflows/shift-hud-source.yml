@@ -1,0 +1,42 @@
+name: Comfort Shift HUD source checks
+
+on:
+  push:
+    paths:
+      - "PlayroomsShiftHUD/**"
+      - "scripts/install-shift-hud.ps1"
+      - "scripts/rollback-shift-hud.ps1"
+      - "tests/test_shift_hud_source.py"
+      - ".github/workflows/shift-hud-source.yml"
+  pull_request:
+    paths:
+      - "PlayroomsShiftHUD/**"
+      - "scripts/install-shift-hud.ps1"
+      - "scripts/rollback-shift-hud.ps1"
+      - "tests/test_shift_hud_source.py"
+      - ".github/workflows/shift-hud-source.yml"
+
+jobs:
+  source-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python source regression tests
+        run: python3 -m unittest discover -s tests -p 'test_shift_hud_source.py' -v
+      - name: Parse PowerShell scripts without executing them
+        shell: pwsh
+        run: |
+          $paths = @('scripts/install-shift-hud.ps1', 'scripts/rollback-shift-hud.ps1')
+          foreach ($path in $paths) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$path : $_" }
+              exit 1
+            }
+            Write-Host "$path : PowerShell syntax OK"
+          }
+          Write-Host 'Full Windows/.NET/Unity gameplay tests require locally generated Playrooms IL2CPP references.'
