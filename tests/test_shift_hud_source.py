@@ -19,6 +19,7 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn('nl.comfortcode.playrooms.shifthud', p)
         self.assertIn('BepInDependency.DependencyFlags.SoftDependency', p)
         self.assertIn('com.playroomscoop.mod', p)
+        self.assertIn('Config.Bind("HUD", "TopRight", false', p)
         self.assertIn('AddComponent<ShiftHudBehaviour>()', p)
         self.assertFalse((HUD / "PlayroomsCoop.dll").exists())
 
