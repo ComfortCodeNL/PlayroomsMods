@@ -79,10 +79,9 @@ namespace ComfortCode.Playrooms.ShiftHud
             height = Mathf.Min(height, Screen.height - 100f);
             if (height < 135f) return;
 
-            // Some Unity 6000.6 IL2CPP interop wrappers provide a
-            // GUI.DrawTexture/Texture2D.whiteTexture stub that throws
-            // NotSupportedException("Method unstripping failed").
-            // GUI.Box is already used by the original co-op and NG+ mods.
+            // The previous texture-backed panel could invoke stripped
+            // Unity 6000.6 IL2CPP GUI methods. Reuse the GUI.Box path already
+            // employed by the original co-op and NG+ mod interfaces.
             _drawStage = "panel GUI.Box";
             GUI.Box(new Rect(x, y, width, height), "", _panel);
 
