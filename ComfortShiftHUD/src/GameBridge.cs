@@ -128,9 +128,9 @@ namespace ComfortCode.Playrooms.ShiftHud
             // active in the scene, unlike a FindObjectsByType-only scan.
             var service = First("TwoPixels.Room.RoomService");
             if (service == null) yield break;
-            object rooms;
+            object rooms = null;
             try { rooms = Read(service, "Rooms"); }
-            catch { yield break; }
+            catch { /* Missing service property: use the active-object fallback. */ }
             if (rooms == null) yield break;
             if (rooms is IEnumerable enumerable)
             {
