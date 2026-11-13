@@ -82,6 +82,13 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn("0Harmony.dll", project)
         self.assertIn("BepInEx.Unity.IL2CPP.dll", project)
         self.assertIn("UnityEngine.IMGUIModule.dll", project)
+        # GUIStyle.alignment and TextAnchor live in TextRenderingModule
+        # (confirmed by the actual CS0012 from a local Playrooms build).
+        self.assertIn('<Reference Include="UnityEngine.TextRenderingModule">', project)
+        self.assertIn("BepInEx/interop/UnityEngine.TextRenderingModule.dll", project)
+        self.assertIn("!Exists('$(GameDir)/BepInEx/interop/UnityEngine.TextRenderingModule.dll')", project)
+        self.assertIn("UnityEngine.TextRenderingModule.dll", read("scripts/install-comfort-shift-hud.ps1"))
+        self.assertIn("TextAnchor.MiddleCenter", read("ComfortShiftHUD/src/ShiftHudBehaviour.cs"))
         self.assertNotIn("PlayroomsCoop.dll", project)
 
 if __name__ == "__main__":
