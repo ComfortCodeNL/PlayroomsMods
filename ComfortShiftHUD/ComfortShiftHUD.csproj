@@ -26,6 +26,8 @@
     <Reference Include="Il2Cppmscorlib"><HintPath>$(GameDir)/BepInEx/interop/Il2Cppmscorlib.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameDir)/BepInEx/interop/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameDir)/BepInEx/interop/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- GUIStyle.alignment / TextAnchor is defined here, not in IMGUIModule. -->
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameDir)/BepInEx/interop/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <Target Name="VerifyInstalledInterop" BeforeTargets="ResolveReferences">
     <Error Condition="!Exists('$(GameDir)/Playrooms.exe')" Text="Playrooms.exe ontbreekt in $(GameDir)." />
@@ -34,5 +36,6 @@
     <Error Condition="!Exists('$(GameDir)/BepInEx/interop/Il2Cppmscorlib.dll')" Text="IL2CPP interop ontbreekt, behoud de bestaande 161 gegenereerde DLL's." />
     <Error Condition="!Exists('$(GameDir)/BepInEx/interop/UnityEngine.CoreModule.dll')" Text="UnityEngine.CoreModule IL2CPP ontbreekt." />
     <Error Condition="!Exists('$(GameDir)/BepInEx/interop/UnityEngine.IMGUIModule.dll')" Text="UnityEngine.IMGUIModule IL2CPP ontbreekt." />
+    <Error Condition="!Exists('$(GameDir)/BepInEx/interop/UnityEngine.TextRenderingModule.dll')" Text="UnityEngine.TextRenderingModule IL2CPP ontbreekt (vereist voor TextAnchor). Behoud of herstel de bestaande interop-DLLs." />
   </Target>
 </Project>
