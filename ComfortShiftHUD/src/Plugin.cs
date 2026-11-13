@@ -13,7 +13,7 @@ namespace ComfortCode.Playrooms.ShiftHud
     {
         public const string Guid = "nl.comfortcode.playrooms.shifthud";
         public const string Name = "Comfort Shift HUD";
-        public const string Version = "0.1.0";
+        public const string Version = "0.1.1";
 
         internal static ManualLogSource Logger;
         internal static ConfigEntry<bool> ShowHud;
