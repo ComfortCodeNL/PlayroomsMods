@@ -26,17 +26,31 @@ namespace ComfortCode.Playrooms.ShiftHud
 
             // Prefer RoomService.Rooms, which includes tracked but potentially
             // inactive rooms, then supplement with active scene RoomObjects.
-            foreach (var room in GameBridge.ServiceRooms())
+            try
             {
-                var id = GameBridge.RoomId(room);
-                if (string.IsNullOrWhiteSpace(id) || byId.ContainsKey(id)) continue;
-                byId[id] = room;
+                foreach (var room in GameBridge.ServiceRooms())
+                {
+                    var id = GameBridge.RoomId(room);
+                    if (string.IsNullOrWhiteSpace(id) || byId.ContainsKey(id)) continue;
+                    byId[id] = room;
+                }
             }
-            foreach (var room in GameBridge.FindAll("TwoPixels.Room.RoomObject"))
+            catch (Exception e)
             {
-                var id = GameBridge.RoomId(room);
-                if (string.IsNullOrWhiteSpace(id) || byId.ContainsKey(id)) continue;
-                byId[id] = room;
+                Plugin.Logger?.LogWarning("[ShiftHUD] RoomService.Rooms not readable; using active rooms: " + e.Message);
+            }
+            try
+            {
+                foreach (var room in GameBridge.FindAll("TwoPixels.Room.RoomObject"))
+                {
+                    var id = GameBridge.RoomId(room);
+                    if (string.IsNullOrWhiteSpace(id) || byId.ContainsKey(id)) continue;
+                    byId[id] = room;
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger?.LogWarning("[ShiftHUD] Active room scan unavailable: " + e.Message);
             }
 
             object current = null;
