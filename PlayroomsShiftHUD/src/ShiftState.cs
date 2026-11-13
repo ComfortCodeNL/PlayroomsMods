@@ -25,7 +25,7 @@ namespace ComfortCode.Playrooms.ShiftHUD
         private string _currentRoomId;
         private float _nextClock, _nextRooms, _nextSelect;
         private int _scanRoomIndex;
-        private bool _scanning, _hasClock, _isInWorld;
+        private bool _scanning, _hasClock, _isInWorld, _menuShowing;
         private int _day = -1, _phase = -1;
         private float _remainingSeconds;
         private int _lastLoggedRooms = -1;
@@ -99,6 +99,7 @@ namespace ComfortCode.Playrooms.ShiftHUD
                 _nextClock = now + 0.5f;
                 UpdateClock();
             }
+            if (_menuShowing) return;
             if (now >= _nextRooms && !_scanning)
             {
                 _nextRooms = now + Mathf.Clamp(Plugin.RefreshSeconds.Value, 1f, 15f);
@@ -122,6 +123,7 @@ namespace ComfortCode.Playrooms.ShiftHUD
                     ResetForMenu();
                     return;
                 }
+                _menuShowing = false;
                 var dts = GameAccess.First("TwoPixels.DayTime.DayTimeService");
                 if (dts == null)
                 {
@@ -170,6 +172,7 @@ namespace ComfortCode.Playrooms.ShiftHUD
 
         private void ResetForMenu()
         {
+            _menuShowing = true;
             _hasClock = false;
             _isInWorld = false;
             _phase = -1;
