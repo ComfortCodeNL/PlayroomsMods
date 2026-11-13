@@ -56,6 +56,13 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn("Unity OnGUI callback active", text)
         self.assertNotIn("if (!_snapshot.CurrentRoom)", text)
 
+    def test_runtime_verifier_requires_successful_draw(self):
+        verifier = read("scripts/verify-comfort-shift-hud.ps1")
+        self.assertIn("HUD frame rendered without exception", verifier)
+        self.assertIn("-or -not $rendered", verifier)
+        self.assertIn("Method unstripping failed", verifier)
+        self.assertIn("HUD drawing failed at stage", verifier)
+
     def test_install_only_own_dll_with_dry_run_and_backups(self):
         script = read("scripts/install-comfort-shift-hud.ps1")
         self.assertIn("if (-not $Apply)", script)
