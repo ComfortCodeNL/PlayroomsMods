@@ -26,6 +26,16 @@ Op basis van de game-interop uit de in deze conversatie aangeleverde Playrooms-m
 
 De originele co-opbron in dezelfde repository gebruikt eveneens RoomObject/DayTimeService en interpreteert fase 0 als dag, fase 1/2 als licht-uit/nacht en fase 3 als nieuwe dag. Deze interopnamen zijn **geen bewijs** dat Harmony de native method daadwerkelijk veilig kan patchen. De patchinstelling is apart uit te schakelen.
 
+## Runtimecorrectie: HUD `Method unstripping failed`
+
+Een **echte Playrooms-v1.0.1-log** bevestigde dat Comfort Shift HUD 0.1.0 wordt geladen en dat zowel de Unity `Update`- als `OnGUI`-callback werken. De GUI werd echter niet getekend doordat `ShiftHudBehaviour.Draw()` herhaaldelijk `System.NotSupportedException: Method unstripping failed` gooide. Dat is een Unity IL2CPP/interop-uitvoeringsfout, geen probleem met de sneltoetsen of het starten van de plugin. De log wijst nog niet naar de specifieke Unity-functie die dit veroorzaakt.
+
+Om de mogelijke oorzaken te beperken, tekent de nieuwe versie de HUD met `GUI.Box` en `GUI.Label`, net als de originele PlayroomsCoop-mod, en gebruikt zij geen `GUI.DrawTexture`, `Texture2D.whiteTexture` of `GUIStyle.CalcSize` meer. Interne helpermethoden `Draw` en `Warn` zijn gemarkeerd met `[HideFromIl2Cpp]` zodat zij niet onnodig in de native objectregistratie belanden.
+
+De plugin logt voortaan **`[ShiftHUD] HUD frame rendered without exception.`** zodra de HUD voor het eerst volledig getekend is. Bij een uitzondering schrijft hij de daadwerkelijke tekenstap (bijvoorbeeld `style initialization`, `panel GUI.Box`, `header GUI.Label`) naar de log. `scripts/verify-comfort-shift-hud.ps1` vereist nu een succesvolle HUD-framebevestiging in plaats van uitsluitend een `OnGUI`-callback.
+
+**Status:** de eerder ontbrekende HUD is feitelijk bewezen. De nieuwe tekenroute is een gerichte fix, maar de eerste succesvolle render in de echte Playrooms-client moet nog bevestigd worden. De Unity-engine-log kan daarnaast niet-fatale meldingen tonen over ontbrekende `UnityEngine.TimelineFoundationModule` en `UnityEngine.PhysicsCore2DModule`; deze verklaren op zichzelf de HUD-uitzondering niet.
+
 ## Buildcorrectie: CS7038 bij DLL-uitvoer
 
 De tweede echte Windows-compile liep niet meer vast op de ontbrekende typeverwijzing, maar op `CSC error CS7038: Failed to emit module ComfortShiftHUD; Unable to determine specific cause of the failure`. Dit is een **compiler-/metadata-uitvoerfout**, niet een melding dat de mod al geïnstalleerd of getest is.

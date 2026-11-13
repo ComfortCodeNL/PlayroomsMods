@@ -56,6 +56,13 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertIn("Unity OnGUI callback active", text)
         self.assertNotIn("if (!_snapshot.CurrentRoom)", text)
 
+    def test_runtime_verifier_requires_successful_draw(self):
+        verifier = read("scripts/verify-comfort-shift-hud.ps1")
+        self.assertIn("HUD frame rendered without exception", verifier)
+        self.assertIn("-or -not $rendered", verifier)
+        self.assertIn("Method unstripping failed", verifier)
+        self.assertIn("HUD drawing failed at stage", verifier)
+
     def test_install_only_own_dll_with_dry_run_and_backups(self):
         script = read("scripts/install-comfort-shift-hud.ps1")
         self.assertIn("if (-not $Apply)", script)
@@ -88,8 +95,15 @@ class ShiftHudSourceTests(unittest.TestCase):
         self.assertNotIn('UnityEngine.TextRenderingModule.dll', read("scripts/install-comfort-shift-hud.ps1"))
         ui = read("ComfortShiftHUD/src/ShiftHudBehaviour.cs")
         self.assertNotIn("TextAnchor.MiddleCenter", ui)
-        self.assertIn("_large.CalcSize(new GUIContent(caption))", ui)
+        self.assertNotIn("_large.CalcSize(", ui)
+        self.assertNotIn("GUI.DrawTexture(", ui)
+        self.assertNotIn("Texture2D.whiteTexture", ui)
+        self.assertIn("GUI.Box(new Rect(x, y, width, height)", ui)
+        self.assertIn("GUI.Box(new Rect(bx, by, w, 78f)", ui)
         self.assertIn("bx + (w - textWidth) * 0.5f", ui)
+        self.assertIn("HUD frame rendered without exception.", ui)
+        self.assertIn("HUD drawing failed at stage", ui)
+        self.assertIn("[HideFromIl2Cpp]", ui)
         self.assertIn("<ProduceReferenceAssembly>false</ProduceReferenceAssembly>", project)
         self.assertIn("<DebugType>none</DebugType>", project)
         self.assertIn("build-diagnostic.log", read("scripts/install-comfort-shift-hud.ps1"))
