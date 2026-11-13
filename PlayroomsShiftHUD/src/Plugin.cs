@@ -29,7 +29,7 @@ namespace ComfortCode.Playrooms.ShiftHUD
             Logger = base.Log;
             ShowHud = Config.Bind("HUD", "Visible", true,
                 "Show ball count, shift countdown and cleaned rooms; always visible while in game, no hotkeys required.");
-            HudRight = Config.Bind("HUD", "TopRight", true,
+            HudRight = Config.Bind("HUD", "TopRight", false,
                 "Put overlay at the top right; false for top left.");
             MaxRoomNames = Config.Bind("HUD", "MaximumCleanRoomNames", 8,
                 "Maximum number of cleaned room names shown at once (1-16).");

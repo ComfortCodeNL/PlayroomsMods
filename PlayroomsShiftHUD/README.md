@@ -28,7 +28,7 @@ Wanneer de shift is verlopen, staat bovenaan in het midden:
 
     END DAY
 
-Het scherm is standaard altijd zichtbaar tijdens een gamewereld, **zonder F8/F9/F10-toetsen**. Daardoor is er geen conflict met de co-opmod en onze eerdere tracker die bij sommige gebruikers geen zichtbare reactie op F9/F10 gaf. Instellingen staan in BepInEx/config/nl.comfortcode.playrooms.shifthud.cfg.
+Het scherm is standaard linksboven zichtbaar tijdens een gamewereld, **zonder F8/F9/F10-toetsen**. Dat voorkomt overlap met de vorige Comfort Ball Tracker die normaal rechtsboven staat. Daardoor is er geen conflict met de co-opmod en onze eerdere tracker die bij sommige gebruikers geen zichtbare reactie op F9/F10 gaf. Instellingen staan in BepInEx/config/nl.comfortcode.playrooms.shifthud.cfg.
 
 ## Installeren via PowerShell (Windows)
 
@@ -72,7 +72,7 @@ Dat herstelt uitsluitend de vorige Shift HUD-DLL of verwijdert hem als hij voorh
 | Instelling | Default | Gedrag |
 | --- | --- | --- |
 | HUD.Visible | true | HUD aan/uit zonder toetsen |
-| HUD.TopRight | true | Rechtsboven/links |
+| HUD.TopRight | false | Standaard linksboven; rechtsboven instelbaar |
 | HUD.MaximumCleanRoomNames | 8 | 1 tot 16 namen |
 | Tracking.RefreshSeconds | 3 | Volledige scan elke 1-15 sec; gebeurt in chunks |
 | AfterShift.EnableLocalWorkLight | true | Lokale lichtbron na shifteinde |
