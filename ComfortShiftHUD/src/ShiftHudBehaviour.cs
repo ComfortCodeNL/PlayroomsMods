@@ -9,7 +9,7 @@ namespace ComfortCode.Playrooms.ShiftHud
         public ShiftHudBehaviour(IntPtr ptr) : base(ptr) { }
 
         private ShiftSnapshot _snapshot = new ShiftSnapshot();
-        private float _nextRead, _nextLightAttempt, _lastError;
+        private float _nextRead, _lastError;
         private GUIStyle _panel, _title, _normal, _small, _large;
         private bool _updateReported, _guiReported, _firstFrameDrawn;
         private string _drawStage = "not started";
@@ -24,11 +24,9 @@ namespace ComfortCode.Playrooms.ShiftHud
             try
             {
                 float now = Time.realtimeSinceStartup;
-                if (now >= _nextLightAttempt && !NightLightKeeper.Installed)
-                {
-                    _nextLightAttempt = now + 5f;
-                    NightLightKeeper.TryInstall();
-                }
+                // Poll shortcuts separately from the slower room recount.
+                // No lighting interception: the game's blackout is untouched.
+                CheatHotkeys.Tick();
                 if (now < _nextRead) return;
                 _nextRead = now + Mathf.Clamp(Plugin.RefreshInterval.Value, 0.25f, 5f);
                 _snapshot = ShiftSnapshot.Capture();
@@ -116,20 +114,28 @@ namespace ComfortCode.Playrooms.ShiftHud
                         "... en " + (_snapshot.CompletedNames.Count - show) + " meer", _small);
             }
 
-            if (_snapshot.ShiftEnded)
+            if (_snapshot.FinalTenSeconds)
             {
                 float w = Mathf.Min(Screen.width - 30f, 520f);
                 float bx = (Screen.width - w) * 0.5f, by = Mathf.Max(20f, Screen.height * 0.16f);
-                _drawStage = "END DAY GUI.Box";
+                _drawStage = "END GAME GUI.Box";
                 GUI.Box(new Rect(bx, by, w, 78f), "", _panel);
                 // Use a known rectangle width, avoiding GUIStyle.CalcSize
                 // (a separate native IMGUI method that may also be stripped).
                 const float captionWidth = 230f;
                 float textWidth = Mathf.Min(w - 16f, captionWidth);
-                _drawStage = "END DAY GUI.Label";
+                _drawStage = "END GAME GUI.Label";
                 GUI.Label(new Rect(bx + (w - textWidth) * 0.5f, by + 8f, textWidth, 60f),
-                    "<b><color=#FFE48C>END DAY</color></b>", _large);
+                    "<b><color=#FFE48C>END GAME</color></b>", _large);
             }
+            if (!string.IsNullOrEmpty(CheatHotkeys.Message) &&
+                Time.realtimeSinceStartup < CheatHotkeys.MessageUntil)
+            {
+                _drawStage = "shortcut feedback GUI.Label";
+                GUI.Label(new Rect(left, y + height - 24f, inner, 22f),
+                    Escape(Short(CheatHotkeys.Message, 52)), _small);
+            }
+
             _drawStage = "rendered";
             if (!_firstFrameDrawn)
             {
