@@ -17,7 +17,7 @@ namespace ComfortCode.Playrooms.ShiftHud
 
         internal static void TryInstall()
         {
-            if (_installed) return;
+            if (_installed || Plugin.KeepLightsOn == null || !Plugin.KeepLightsOn.Value) return;
             try
             {
                 Type service = GameBridge.Type("TwoPixels.LightSystem.LightSystemService");
